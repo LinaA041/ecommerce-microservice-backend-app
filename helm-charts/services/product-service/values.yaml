@@ -1,0 +1,114 @@
+namespace: dev
+
+image:
+  repository: selimhorri/product-service-ecommerce-boot
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8500
+  targetPort: 8500
+
+# ServiceAccount
+# useCommonServiceAccount: si se usa el de infrastructure/rbac
+serviceAccount:
+  create: false  # false = usa el común (microservice-sa de infrastructure)
+  name: "microservice-sa"
+
+# ConfigMaps
+configMaps:
+  # ConfigMap comun (presente en infrastructure)
+  common:
+    enabled: true
+    name: "common-env"
+  
+  # ConfigMap especifico de este servicio (se crea con el Chart)
+  specific:
+    enabled: false
+    data:
+      SERVER_PORT: "8500"
+      SPRING_APPLICATION_NAME: "product-service"
+
+
+secrets:
+  enabled: false
+  data: {}
+    # DB_PASSWORD: "encoded-password"
+
+# Configuración de recursos
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# Probes (basadas en Spring Boot Actuator)
+livenessProbe:
+  enabled: false  # Cambia a true cuando tengas actuator configurado
+  path: /actuator/health/liveness
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: false  # Cambia a true cuando tengas actuator configurado
+  path: /actuator/health/readiness
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+
+
+terminationGracePeriodSeconds: 30
+
+
+labels:
+  app: product-service
+  version: v1
+  tier: backend
+
+# Anotaciones
+annotations: {}
+
+
+autoscaling:
+  enabled: false  # Cambia a true cuando se implemente autoscaling
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+ingress:
+  enabled: false  # Cambia a true cuando se implemente ingress
+  className: "nginx"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: product-service.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: product-service-tls
+    #   hosts:
+    #     - product-service.local
+
+httpRoute:
+  enabled: false  # Deshabilitado
+  annotations: {}
+  parentRefs: []
+  hostnames: []
+  rules: []

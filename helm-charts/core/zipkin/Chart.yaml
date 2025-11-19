@@ -1,0 +1,10 @@
+apiVersion: v2
+name: zipkin
+description: Zipkin Distributed Tracing System
+type: application
+version: 1.0.0
+appVersion: "latest"
+keywords:
+  - zipkin
+  - tracing
+  - observability

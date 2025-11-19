@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+  namespace: ecommerce-microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      serviceAccountName: microservice-sa
+      containers:
+      - name: product-service
+        image: selimhorri/product-service-ecommerce-boot:0.1.0
+        ports:
+        - containerPort: 8500
+        envFrom:
+        - configMapRef:
+            name: common-env

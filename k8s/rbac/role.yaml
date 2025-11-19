@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: microservice-reader
+  namespace: ecommerce-microservice
+rules:
+- apiGroups: [""]
+  resources:
+  - configmaps
+  - secrets
+  - services
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: product-service
+description: Product Service for E-commerce Platform
+
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
+keywords:
+  - ecommerce
+  - microservice
+  - product
+maintainers:
+  - name: Lina Andrade
+    email: lina.andrade0411@gmail.com

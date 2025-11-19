@@ -1,0 +1,10 @@
+apiVersion: v2
+name: api-gateway
+description: API Gateway for E-commerce Platform
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
+keywords:
+  - api-gateway
+  - spring-cloud
+  - microservice

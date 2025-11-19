@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shipping-service
+description: Shipping Service for E-commerce Platform
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
