@@ -1,0 +1,114 @@
+=== Pod Security Standards Configuration ===
+Namespace: dev
+
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: baseline
+
+=== Pod Security Context Verification ===
+
+Pod: api-gateway-7f95647cf4-86bgz
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: cloud-config-57cc9b44bd-tzghb
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: favourite-service-7c96bcc44b-q277v
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: order-service-75fdf8857-9zv58
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: payment-service-64c64db9bb-pckgs
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: product-service-6658d745c-x8t5t
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: proxy-client-79fb56b555-7nxkc
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: service-discovery-6bc659c46b-ngbms
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: shipping-service-6484f55869-hpfdh
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: user-service-579bc7797c-schrc
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+Pod: zipkin-676985d889-8fqjn
+    Pod Security:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+    Container Security:
+        allowPrivilegeEscalation: false
+        capabilities.drop: ALL
+
+
+=== Compliance Summary ===
+
+Total pods: 11
+Compliant pods: 11
+Compliance rate: 100%

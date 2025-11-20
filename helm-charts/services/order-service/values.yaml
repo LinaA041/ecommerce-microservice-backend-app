@@ -40,10 +40,21 @@ podLabels:
   app: order-service
   tier: backend
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
+securityContext: 
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: false   #Changed to false as order-service needs to write logs
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
   # capabilities:
   #   drop:
   #   - ALL
@@ -116,6 +127,15 @@ httpRoute:
   #     headers:
   #     - name: version
   #       value: v2
+initContainers:
+  enabled: true
+  waitForServices:
+    - name: service-discovery
+      host: service-discovery
+      port: 8761
+    - name: cloud-config
+      host: cloud-config
+      port: 9296
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious

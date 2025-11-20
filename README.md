@@ -1,621 +1,827 @@
-# e-Commerce-boot μServices 
+# "Sealed Secrets" for Kubernetes
 
-## Important Note: This project's new milestone is to move The whole system to work on Kubernetes, so stay tuned.
+[![](https://img.shields.io/badge/install-docs-brightgreen.svg)](#Installation)
+[![](https://img.shields.io/github/release/bitnami-labs/sealed-secrets.svg)](https://github.com/bitnami-labs/sealed-secrets/releases/latest)
+[![](https://img.shields.io/homebrew/v/kubeseal)](https://formulae.brew.sh/formula/kubeseal)
+[![Build Status](https://github.com/bitnami-labs/sealed-secrets/actions/workflows/ci.yml/badge.svg)](https://github.com/bitnami-labs/sealed-secrets/actions/workflows/ci.yml)
+[![](https://img.shields.io/github/v/release/bitnami-labs/sealed-secrets?include_prereleases&label=helm&sort=semver)](https://github.com/bitnami-labs/sealed-secrets/releases)
+[![Download Status](https://img.shields.io/docker/pulls/bitnami/sealed-secrets-controller.svg)](https://hub.docker.com/r/bitnami/sealed-secrets-controller)
+[![Go Report Card](https://goreportcard.com/badge/github.com/bitnami-labs/sealed-secrets)](https://goreportcard.com/report/github.com/bitnami-labs/sealed-secrets)
+![Downloads](https://img.shields.io/github/downloads/bitnami-labs/sealed-secrets/total.svg)
 
-<!--## Better Code Hub
-I analysed this repository according to the clean code standards on [Better Code Hub](https://bettercodehub.com/) just to get an independent opinion of how bad the code is. Surprisingly, the compliance score is high!
--->
-## Introduction
-- This project is a development of a small set of **Spring Boot** and **Cloud** based Microservices projects that implement cloud-native intuitive, Reactive Programming, Event-driven, Microservices design patterns, and coding best practices.
-- The project follows **CloudNative**<!--(https://www.cncf.io/)--> recommendations and The [**twelve-factor app**](https://12factor.net/) methodology for building *software-as-a-service apps* to show how μServices should be developed and deployed.
-- This project uses cutting edge technologies like Docker, Kubernetes, Elasticsearch Stack for
- logging and monitoring, Java SE 11, H2, and MySQL databases, all components developed with TDD in mind, covering integration & performance testing, and many more.
- - This project is going to be developed as stages, and all such stage steps are documented under
-  the project **e-Commerce-boot μServices** **README** file <!--[wiki page](https://github.com/mohamed-taman/Springy-Store-Microservices/wiki)-->.
----
-## Getting started
-### System components Structure
-Let's explain first the system structure to understand its components:
+**Problem:** "I can manage all my K8s config in git, except Secrets."
+
+**Solution:** Encrypt your Secret into a SealedSecret, which *is* safe
+to store - even inside a public repository. The SealedSecret can be
+decrypted only by the controller running in the target cluster and
+nobody else (not even the original author) is able to obtain the
+original Secret from the SealedSecret.
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Overview](#overview)
+  - [SealedSecrets as templates for secrets](#sealedsecrets-as-templates-for-secrets)
+  - [Public key / Certificate](#public-key--certificate)
+  - [Scopes](#scopes)
+- [Installation](#installation)
+  - [Controller](#controller)
+    - [Kustomize](#kustomize)
+    - [Helm Chart](#helm-chart)
+  - [Kubeseal](#kubeseal)
+    - [Homebrew](#homebrew)
+    - [MacPorts](#macports)
+    - [Linux](#linux)
+    - [Installation from source](#installation-from-source)
+- [Upgrade](#upgrade)
+- [Usage](#usage)
+  - [Managing existing secrets](#managing-existing-secrets)
+  - [Patching existing secrets](#patching-existing-secrets)
+  - [Update existing secrets](#update-existing-secrets)
+  - [Raw mode (experimental)](#raw-mode-experimental)
+  - [Validate a Sealed Secret](#validate-a-sealed-secret)
+- [Secret Rotation](#secret-rotation)
+  - [Sealing key renewal](#sealing-key-renewal)
+  - [User secret rotation](#user-secret-rotation)
+  - [Early key renewal](#early-key-renewal)
+  - [Common misconceptions about key renewal](#common-misconceptions-about-key-renewal)
+  - [Manual key management (advanced)](#manual-key-management-advanced)
+  - [Re-encryption (advanced)](#re-encryption-advanced)
+- [Details (advanced)](#details-advanced)
+  - [Crypto](#crypto)
+- [Developing](#developing)
+- [FAQ](#faq)
+  - [Will you still be able to decrypt if you no longer have access to your cluster?](#will-you-still-be-able-to-decrypt-if-you-no-longer-have-access-to-your-cluster)
+  - [How can I do a backup of my SealedSecrets?](#how-can-i-do-a-backup-of-my-sealedsecrets)
+  - [Can I decrypt my secrets offline with a backup key?](#can-i-decrypt-my-secrets-offline-with-a-backup-key)
+  - [What flags are available for kubeseal?](#what-flags-are-available-for-kubeseal)
+  - [How do I update parts of JSON/YAML/TOML/.. file encrypted with sealed secrets?](#how-do-i-update-parts-of-jsonyamltoml-file-encrypted-with-sealed-secrets)
+  - [Can I bring my own (pre-generated) certificates?](#can-i-bring-my-own-pre-generated-certificates)
+  - [How to use kubeseal if the controller is not running within the `kube-system` namespace?](#how-to-use-kubeseal-if-the-controller-is-not-running-within-the-kube-system-namespace)
+  - [How to verify the images?](#how-to-verify-the-images)
+  - [How to use one controller for a subset of namespaces](#How-to-use-one-controller-for-a-subset-of-namespaces)
+
+- [Community](#community)
+  - [Related projects](#related-projects)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+## Overview
+
+Sealed Secrets is composed of two parts:
+
+- A cluster-side controller / operator
+- A client-side utility: `kubeseal`
+
+The `kubeseal` utility uses asymmetric crypto to encrypt secrets that only the controller can decrypt.
+
+These encrypted secrets are encoded in a `SealedSecret` resource, which you can see as a recipe for creating
+a secret. Here is how it looks:
+
+```yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mysecret
+  namespace: mynamespace
+spec:
+  encryptedData:
+    foo: AgBy3i4OJSWK+PiTySYZZA9rO43cGDEq.....
 ```
-ecommerce-microservice-backend-app [μService] --> Parent folder.
-|- docs --> All docs and diagrams.
-|- k8s --> All **Kubernetes** config files.
-    |- proxy-client --> Authentication & Authorization µService, exposing all 
-    |- api-gateway --> API Gateway server
-    |- service-discovery --> Service Registery server
-    |- cloud-config --> Centralized Configuration server
-    |- user-service --> Manage app users (customers & admins) as well as their credentials
-    |- product-service --> Manage app products and their respective categories
-    |- favourite-service --> Manage app users' favourite products added to their own favourite list
-    |- order-service --> Manage app orders based on carts
-    |- shipping-service --> Manage app order-shipping products
-    |- payment-service --> Manage app order payments
-|- compose.yml --> contains all services landscape with Kafka  
-|- run-em-all.sh --> Run all microservices in separate mode. 
-|- setup.sh --> Install all shared POMs and shared libraries. 
-|- stop-em-all.sh --> Stop all services runs in standalone mode. 
-|- test-em-all.sh --> This will start all docker compose landscape and test them, then shutdown docker compose containers with test finishes (use switch start stop)
+
+Once unsealed this will produce a secret equivalent to this:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+  namespace: mynamespace
+data:
+  foo: YmFy  # <- base64 encoded "bar"
 ```
-Now, as we have learned about different system components, then let's start.
 
-### System Boundary *Architecture* - μServices Landscape
+This normal [kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) will appear in the cluster
+after a few seconds you can use it as you would use any secret that you would have created directly (e.g. reference it from a `Pod`).
 
-![System Boundary](app-architecture.drawio.png)
+Jump to the [Installation](#installation) section to get up and running.
 
-### Required software
+The [Usage](#usage) section explores in more detail how you craft `SealedSecret` resources.
 
-The following are the initially required software pieces:
+### SealedSecrets as templates for secrets
 
-1. **Java 11**: JDK 11 LTS can be downloaded and installed from https://www.oracle.com/java/technologies/javase/jdk11-archive-downloads.html
+The previous example only focused on the encrypted secret items themselves, but the relationship between a `SealedSecret` custom resource and the `Secret` it unseals into is similar in many ways (but not in all of them) to the familiar `Deployment` vs `Pod`.
 
-1. **Git**: it can be downloaded and installed from https://git-scm.com/downloads
+In particular, the annotations and labels of a `SealedSecret` resource are not the same as the annotations of the `Secret` that gets generated out of it.
 
-1. **Maven**: Apache Maven is a software project management and comprehension tool, it can be downloaded from here https://maven.apache.org/download.cgi
+To capture this distinction, the `SealedSecret` object has a `template` section which encodes all the fields you want the controller to put in the unsealed `Secret`.
 
-1. **curl**: this command-line tool for testing HTTP-based APIs can be downloaded and installed from https://curl.haxx.se/download.html
+This includes metadata such as labels or annotations, but also things like the `type` of the secret.
 
-1. **jq**: This command-line JSON processor can be downloaded and installed from https://stedolan.github.io/jq/download/
+```yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mysecret
+  namespace: mynamespace
+  annotations:
+    "kubectl.kubernetes.io/last-applied-configuration": ....
+spec:
+  encryptedData:
+    .dockerconfigjson: AgBy3i4OJSWK+PiTySYZZA9rO43cGDEq.....
+  template:
+    type: kubernetes.io/dockerconfigjson
+    # this is an example of labels and annotations that will be added to the output secret
+    metadata:
+      labels:
+        "jenkins.io/credentials-type": usernamePassword
+      annotations:
+        "jenkins.io/credentials-description": credentials from Kubernetes
+```
 
-1. **Spring Boot Initializer**: This *Initializer* generates *spring* boot project with just what you need to start quickly! Start from here https://start.spring.io/
+The controller would unseal that into something like:
 
-1. **Docker**: The fastest way to containerize applications on your desktop, and you can download it from here [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+  namespace: mynamespace
+  labels:
+    "jenkins.io/credentials-type": usernamePassword
+  annotations:
+    "jenkins.io/credentials-description": credentials from Kubernetes
+  ownerReferences:
+  - apiVersion: bitnami.com/v1alpha1
+    controller: true
+    kind: SealedSecret
+    name: mysecret
+    uid: 5caff6a0-c9ac-11e9-881e-42010aac003e
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: ewogICJjcmVk...
+```
 
-1. **Kubernetes**: We can install **minikube** for testing puposes https://minikube.sigs.k8s.io/docs/start/
+As you can see, the generated `Secret` resource is a "dependent object" of the `SealedSecret` and as such
+it will be updated and deleted whenever the `SealedSecret` object gets updated or deleted.
 
-   > For each future stage, I will list the newly required software. 
+### Public key / Certificate
 
-Follow the installation guide for each software website link and check your software versions from the command line to verify that they are all installed correctly.
+The key certificate (public key portion) is used for sealing secrets,
+and needs to be available wherever `kubeseal` is going to be
+used. The certificate is not secret information, although you need to
+ensure you are using the correct one.
 
-## Using an IDE
+`kubeseal` will fetch the certificate from the controller at runtime
+(requires secure access to the Kubernetes API server), which is
+convenient for interactive use, but it's known to be brittle when users
+have clusters with special configurations such as [private GKE clusters](docs/GKE.md#private-gke-clusters) that have
+firewalls between control plane and nodes.
 
-I recommend that you work with your Java code using an IDE that supports the development of Spring Boot applications such as Spring Tool Suite or IntelliJ IDEA Ultimate Edition. So you can use the Spring Boot Dashboard to run the services, run each microservice test case, and many more.
+An alternative workflow
+is to store the certificate somewhere (e.g. local disk) with
+`kubeseal --fetch-cert >mycert.pem`,
+and use it offline with `kubeseal --cert mycert.pem`.
+The certificate is also printed to the controller log on startup.
 
-All that you want to do is just fire up your IDE **->** open or import the parent folder `ecommerce-microservice-backend-app`, and everything will be ready for you.
-
-## Data Model
-### Entity-Relationship-Diagram
-![System Boundary](ecommerce-ERD.drawio.png)
-
-## Playing With e-Commerce-boot Project
-
-### Cloning It
-
-The first thing to do is to open **git bash** command line, and then simply you can clone the project under any of your favorite places as the following:
+Since v0.9.x certificates get automatically renewed every 30 days. It's good practice that you and your team
+update your offline certificate periodically. To help you with that, since v0.9.2 `kubeseal` accepts URLs too. You can set up your internal automation to publish certificates somewhere you trust.
 
 ```bash
-> git clone https://github.com/SelimHorri/ecommerce-microservice-backend-app.git
+kubeseal --cert https://your.intranet.company.com/sealed-secrets/your-cluster.cert
 ```
 
-### Build & Test Them In Isolation
+It also recognizes the `SEALED_SECRETS_CERT` env var. (pro-tip: see also [direnv](https://github.com/direnv/direnv)).
 
-To build and run the test cases for each service & shared modules in the project, we need to do the following:
+> **NOTE**: we are working on providing key management mechanisms that offload the encryption to HSM based modules or managed cloud crypto solutions such as KMS.
 
-#### Build & Test µServices
-Now it is the time to build our **10 microservices** and run each service integration test in
- isolation by running the following commands:
+### Scopes
+
+SealedSecrets are from the POV of an end user a "write only" device.
+
+The idea is that the SealedSecret can be decrypted only by the controller running in the target cluster and
+nobody else (not even the original author) is able to obtain the original Secret from the SealedSecret.
+
+The user may or may not have direct access to the target cluster.
+More specifically, the user might or might not have access to the Secret unsealed by the controller.
+
+There are many ways to configure RBAC on k8s, but it's quite common to forbid low-privilege users
+from reading Secrets. It's also common to give users one or more namespaces where they have higher privileges,
+which would allow them to create and read secrets (and/or create deployments that can reference those secrets).
+
+Encrypted `SealedSecret` resources are designed to be safe to be looked at without gaining any knowledge about the secrets it conceals. This implies that we cannot allow users to read a SealedSecret meant for a namespace they wouldn't have access to
+and just push a copy of it in a namespace where they can read secrets from.
+
+Sealed-secrets thus behaves *as if* each namespace had its own independent encryption key and thus once you
+seal a secret for a namespace, it cannot be moved in another namespace and decrypted there.
+
+We don't technically use an independent private key for each namespace, but instead we *include* the namespace name
+during the encryption process, effectively achieving the same result.
+
+Furthermore, namespaces are not the only level at which RBAC configurations can decide who can see which secret. In fact, it's possible that users can access a secret called `foo` in a given namespace but not any other secret in the same namespace. We cannot thus by default let users freely rename `SealedSecret` resources otherwise a malicious user would be able to decrypt any SealedSecret for that namespace by just renaming it to overwrite the one secret user does have access to. We use the same mechanism used to include the namespace in the encryption key to also include the secret name.
+
+That said, there are many scenarios where you might not care about this level of protection. For example, the only people who have access to your clusters are either admins or they cannot read any `Secret` resource at all. You might have a use case for moving a sealed secret to other namespaces (e.g. you might not know the namespace name upfront), or you might not know the name of the secret (e.g. it could contain a unique suffix based on the hash of the contents etc).
+
+These are the possible scopes:
+
+- `strict` (default): the secret must be sealed with exactly the same *name* and *namespace*. These attributes become *part of the encrypted data* and thus changing name and/or namespace would lead to "decryption error".
+- `namespace-wide`: you can freely *rename* the sealed secret within a given namespace.
+- `cluster-wide`: the secret can be unsealed in *any* namespace and can be given *any* name.
+
+In contrast to the restrictions of *name* and *namespace*, secret *items* (i.e. JSON object keys like `spec.encryptedData.my-key`) can be renamed at will without losing the ability to decrypt the sealed secret.
+
+The scope is selected with the `--scope` flag:
 
 ```bash
-selim@:~/ecommerce-microservice-backend-app$ ./mvnw clean package 
+kubeseal --scope cluster-wide <secret.yaml >sealed-secret.json
 ```
 
-All build commands and test suite for each microservice should run successfully, and the final output should be like this:
+It's also possible to request a scope via annotations in the input secret you pass to `kubeseal`:
+
+- `sealedsecrets.bitnami.com/namespace-wide: "true"` -> for `namespace-wide`
+- `sealedsecrets.bitnami.com/cluster-wide: "true"` -> for `cluster-wide`
+
+The lack of any of such annotations means `strict` mode. If both are set, `cluster-wide` takes precedence.
+
+> NOTE: Next release will consolidate this into a single `sealedsecrets.bitnami.com/scope` annotation.
+
+## Installation
+
+See https://github.com/bitnami-labs/sealed-secrets/releases for the latest release and detailed installation instructions.
+
+Cloud platform specific notes and instructions:
+
+- [GKE](docs/GKE.md)
+
+### Controller
+
+Once you deploy the manifest it will create the `SealedSecret` resource
+and install the controller into `kube-system` namespace, create a service
+account and necessary RBAC roles.
+
+After a few moments, the controller will start, generate a key pair,
+and be ready for operation. If it does not, check the controller logs.
+
+#### Kustomize
+
+The official controller manifest installation mechanism is just a YAML file.
+
+In some cases you might need to apply your own customizations, like set a custom namespace or set some env variables.
+
+`kubectl` has native support for that, see [kustomize](https://kustomize.io/).
+
+#### Helm Chart
+
+The Sealed Secrets helm chart is now officially supported and hosted in this GitHub repo.
 
 ```bash
----------------< com.selimhorri.app:ecommerce-microservice-backend >-----------
-[INFO] ------------------------------------------------------------------------
-[INFO] Reactor Summary for ecommerce-microservice-backend 0.1.0:
-[INFO] 
-[INFO] ecommerce-microservice-backend ..................... SUCCESS [  0.548 s]
-[INFO] service-discovery .................................. SUCCESS [  3.126 s]
-[INFO] cloud-config ....................................... SUCCESS [  1.595 s]
-[INFO] api-gateway ........................................ SUCCESS [  1.697 s]
-[INFO] proxy-client ....................................... SUCCESS [  3.632 s]
-[INFO] user-service ....................................... SUCCESS [  2.546 s]
-[INFO] product-service .................................... SUCCESS [  2.214 s]
-[INFO] favourite-service .................................. SUCCESS [  2.072 s]
-[INFO] order-service ...................................... SUCCESS [  2.241 s]
-[INFO] shipping-service ................................... SUCCESS [  2.197 s]
-[INFO] payment-service .................................... SUCCESS [  2.006 s]
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------
-[INFO] Total time:  24.156 s
-[INFO] Finished at: 2021-12-29T19:52:57+01:00
-[INFO] ------------------------------------------------------------------------
+helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
 ```
 
-### Running Them All
-Now it's the time to run all of our Microservices, and it's straightforward just run the following `docker-compose` commands:
+> NOTE: The versioning scheme of the helm chart differs from the versioning scheme of the sealed secrets project itself.
+
+Originally the helm chart was maintained by the community and the first version adopted a major version of 1 while the
+sealed secrets project itself is still at major 0.
+This is ok because the version of the helm chart itself is not meant to be necessarily the version of the app itself.
+However this is confusing, so our current versioning rule is:
+
+1. The `SealedSecret` controller version scheme: 0.X.Y
+2. The helm chart version scheme: 1.X.Y-rZ
+
+There can be thus multiple revisions of the helm chart, with fixes that apply only to the helm chart without
+affecting the static YAML manifests or the controller image itself.
+
+> NOTE: The helm chart readme still contains a deprecation notice, but it no longer reflects reality and will be removed upon the next release.
+
+> NOTE: The helm chart by default installs the controller with the name `sealed-secrets`, while the `kubeseal` command line interface (CLI) tries to access the controller with the name `sealed-secrets-controller`. You can explicitly pass `--controller-name` to the CLI:
 
 ```bash
-selim@:~/ecommerce-microservice-backend-app$ docker-compose -f compose.yml up
+kubeseal --controller-name sealed-secrets <args>
 ```
 
-All the **services**, **databases**, and **messaging service** will run in parallel in detach mode (option `-d`), and command output will print to the console the following:
+Alternatively, you can set `fullnameOverride` when installing the chart to override the name. Note also that `kubeseal` assumes that the controller is installed within the `kube-system` namespace by default. So if you want to use the `kubeseal` CLI without having to pass the expected controller name and namespace you should install the Helm Chart like this:
 
 ```bash
-Creating network "ecommerce-microservice-backend-app_default" with the default driver
-Creating ecommerce-microservice-backend-app_api-gateway-container_1       ... done
-Creating ecommerce-microservice-backend-app_favourite-service-container_1 ... done
-Creating ecommerce-microservice-backend-app_service-discovery-container_1 ... done
-Creating ecommerce-microservice-backend-app_shipping-service-container_1  ... done
-Creating ecommerce-microservice-backend-app_order-service-container_1     ... done
-Creating ecommerce-microservice-backend-app_user-service-container_1      ... done
-Creating ecommerce-microservice-backend-app_payment-service-container_1   ... done
-Creating ecommerce-microservice-backend-app_product-service-container_1   ... done
-Creating ecommerce-microservice-backend-app_proxy-client-container_1      ... done
-Creating ecommerce-microservice-backend-app_zipkin-container_1            ... done
-Creating ecommerce-microservice-backend-app_cloud-config-container_1      ... done
+helm install sealed-secrets -n kube-system --set-string fullnameOverride=sealed-secrets-controller sealed-secrets/sealed-secrets
 ```
-### Access proxy-client APIs
-You can manually test `proxy-client` APIs throughout its **Swagger** interface at the following
- URL [https://localhost:8900/swagger-ui.html](https://localhost:8900/swagger-ui.html).
-### Access Service Discovery Server (Eureka)
-If you would like to access the Eureka service discovery point to this URL [http://localhosts:8761/eureka](https://localhost:8761/eureka) to see all the services registered inside it. 
 
-### Access user-service APIs
- URL [https://localhost:8700/swagger-ui.html](https://localhost:8700/swagger-ui.html).
+##### Helm Chart on a restricted environment
 
-<!--
-Note that it is accessed through API Gateway and is secured. Therefore the browser will ask you for `username:mt` and `password:p,` write them to the dialog, and you will access it. This type of security is a **basic form security**.
--->
-The **API Gateway** and **Store Service** both act as a *resource server*. <!--To know more about calling Store API in a secure way you can check the `test-em-all.sh` script on how I have changed the calling of the services using **OAuth2** security.-->
+In some companies you might be given access only to a single namespace, not a full cluster.
 
-#### Check all **Spring Boot Actuator** exposed metrics http://localhost:8080/app/actuator/metrics:
+One of the most restrictive environments you can encounter is:
+- A `namespace` was allocated to you with some `service account`.
+- You do not have access to the rest of the cluster, not even cluster CRDs.
+- You may not even be able to create further service accounts or roles in your namespace.
+- You are required to include resource limits in all your deployments.
+
+Even with these restrictions you can still install the sealed secrets Helm Chart, there is only one pre-requisite:
+- *The cluster must already have the sealed secrets CRDs installed*.
+
+Once your admins installed the CRDs, if they were not there already, you can install the chart by preparing a YAML config file such as this:
+
+```shell
+serviceAccount:
+  create: false
+  name: {allocated-service-account}
+rbac:
+  create: false
+  clusterRole: false
+resources:
+  limits:
+    cpu: 150m
+    memory: 256Mi
+```
+
+Note that:
+- No service accounts are created, instead the one allocated to you will be used.
+  - `{allocated-service-account}` is the name of the `service account` you were allocated on the cluster.
+- No RBAC roles are created neither in the namespace nor the cluster.
+- Resource limits must be specified.
+  - The limits are samples that should work, but you might want to review them in your particular setup.
+
+Once that file is ready, if you named it `config.yaml` you now can install the sealed secrets Helm Chart like this:
+
+```shell
+helm install sealed-secrets -n {allocated-namespace} sealed-secrets/sealed-secrets --skip-crds -f config.yaml
+```
+
+Where `{allocated-namespace}` is the name of the `namespace` you were allocated in the cluster.
+
+### Kubeseal
+
+#### Homebrew
+
+The `kubeseal` client is also available on [homebrew](https://formulae.brew.sh/formula/kubeseal):
 
 ```bash
-{
-    "names": [
-        "http.server.requests",
-        "jvm.buffer.count",
-        "jvm.buffer.memory.used",
-        "jvm.buffer.total.capacity",
-        "jvm.classes.loaded",
-        "jvm.classes.unloaded",
-        "jvm.gc.live.data.size",
-        "jvm.gc.max.data.size",
-        "jvm.gc.memory.allocated",
-        "jvm.gc.memory.promoted",
-        "jvm.gc.pause",
-        "jvm.memory.committed",
-        "jvm.memory.max",
-        "jvm.memory.used",
-        "jvm.threads.daemon",
-        "jvm.threads.live",
-        "jvm.threads.peak",
-        "jvm.threads.states",
-        "logback.events",
-        "process.cpu.usage",
-        "process.files.max",
-        "process.files.open",
-        "process.start.time",
-        "process.uptime",
-        "resilience4j.circuitbreaker.buffered.calls",
-        "resilience4j.circuitbreaker.calls",
-        "resilience4j.circuitbreaker.failure.rate",
-        "resilience4j.circuitbreaker.not.permitted.calls",
-        "resilience4j.circuitbreaker.slow.call.rate",
-        "resilience4j.circuitbreaker.slow.calls",
-        "resilience4j.circuitbreaker.state",
-        "system.cpu.count",
-        "system.cpu.usage",
-        "system.load.average.1m",
-        "tomcat.sessions.active.current",
-        "tomcat.sessions.active.max",
-        "tomcat.sessions.alive.max",
-        "tomcat.sessions.created",
-        "tomcat.sessions.expired",
-        "tomcat.sessions.rejected",
-        "zipkin.reporter.messages",
-        "zipkin.reporter.messages.dropped",
-        "zipkin.reporter.messages.total",
-        "zipkin.reporter.queue.bytes",
-        "zipkin.reporter.queue.spans",
-        "zipkin.reporter.spans",
-        "zipkin.reporter.spans.dropped",
-        "zipkin.reporter.spans.total"
-    ]
-}
+brew install kubeseal
 ```
 
-#### Prometheus exposed metrics at http://localhost:8080/app/actuator/prometheus
+#### MacPorts
+
+The `kubeseal` client is also available on [MacPorts](https://ports.macports.org/port/kubeseal/summary):
 
 ```bash
-# HELP resilience4j_circuitbreaker_not_permitted_calls_total Total number of not permitted calls
-# TYPE resilience4j_circuitbreaker_not_permitted_calls_total counter
-resilience4j_circuitbreaker_not_permitted_calls_total{kind="not_permitted",name="proxyService",} 0.0
-# HELP jvm_gc_live_data_size_bytes Size of long-lived heap memory pool after reclamation
-# TYPE jvm_gc_live_data_size_bytes gauge
-jvm_gc_live_data_size_bytes 3721880.0
-# HELP jvm_gc_pause_seconds Time spent in GC pause
-# TYPE jvm_gc_pause_seconds summary
-jvm_gc_pause_seconds_count{action="end of minor GC",cause="Metadata GC Threshold",} 1.0
-jvm_gc_pause_seconds_sum{action="end of minor GC",cause="Metadata GC Threshold",} 0.071
-jvm_gc_pause_seconds_count{action="end of minor GC",cause="G1 Evacuation Pause",} 6.0
-jvm_gc_pause_seconds_sum{action="end of minor GC",cause="G1 Evacuation Pause",} 0.551
-# HELP jvm_gc_pause_seconds_max Time spent in GC pause
-# TYPE jvm_gc_pause_seconds_max gauge
-jvm_gc_pause_seconds_max{action="end of minor GC",cause="Metadata GC Threshold",} 0.071
-jvm_gc_pause_seconds_max{action="end of minor GC",cause="G1 Evacuation Pause",} 0.136
-# HELP system_cpu_usage The "recent cpu usage" for the whole system
-# TYPE system_cpu_usage gauge
-system_cpu_usage 0.4069206655413552
-# HELP jvm_buffer_total_capacity_bytes An estimate of the total capacity of the buffers in this pool
-# TYPE jvm_buffer_total_capacity_bytes gauge
-jvm_buffer_total_capacity_bytes{id="mapped",} 0.0
-jvm_buffer_total_capacity_bytes{id="direct",} 24576.0
-# HELP zipkin_reporter_spans_dropped_total Spans dropped (failed to report)
-# TYPE zipkin_reporter_spans_dropped_total counter
-zipkin_reporter_spans_dropped_total 4.0
-# HELP zipkin_reporter_spans_bytes_total Total bytes of encoded spans reported
-# TYPE zipkin_reporter_spans_bytes_total counter
-zipkin_reporter_spans_bytes_total 1681.0
-# HELP tomcat_sessions_active_current_sessions  
-# TYPE tomcat_sessions_active_current_sessions gauge
-tomcat_sessions_active_current_sessions 0.0
-# HELP jvm_classes_loaded_classes The number of classes that are currently loaded in the Java virtual machine
-# TYPE jvm_classes_loaded_classes gauge
-jvm_classes_loaded_classes 13714.0
-# HELP process_files_open_files The open file descriptor count
-# TYPE process_files_open_files gauge
-process_files_open_files 17.0
-# HELP resilience4j_circuitbreaker_slow_call_rate The slow call of the circuit breaker
-# TYPE resilience4j_circuitbreaker_slow_call_rate gauge
-resilience4j_circuitbreaker_slow_call_rate{name="proxyService",} -1.0
-# HELP system_cpu_count The number of processors available to the Java virtual machine
-# TYPE system_cpu_count gauge
-system_cpu_count 8.0
-# HELP jvm_threads_daemon_threads The current number of live daemon threads
-# TYPE jvm_threads_daemon_threads gauge
-jvm_threads_daemon_threads 21.0
-# HELP zipkin_reporter_messages_total Messages reported (or attempted to be reported)
-# TYPE zipkin_reporter_messages_total counter
-zipkin_reporter_messages_total 2.0
-# HELP zipkin_reporter_messages_dropped_total  
-# TYPE zipkin_reporter_messages_dropped_total counter
-zipkin_reporter_messages_dropped_total{cause="ResourceAccessException",} 2.0
-# HELP zipkin_reporter_messages_bytes_total Total bytes of messages reported
-# TYPE zipkin_reporter_messages_bytes_total counter
-zipkin_reporter_messages_bytes_total 1368.0
-# HELP http_server_requests_seconds  
-# TYPE http_server_requests_seconds summary
-http_server_requests_seconds_count{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/metrics",} 1.0
-http_server_requests_seconds_sum{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/metrics",} 1.339804427
-http_server_requests_seconds_count{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/prometheus",} 1.0
-http_server_requests_seconds_sum{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/prometheus",} 0.053689381
-# HELP http_server_requests_seconds_max  
-# TYPE http_server_requests_seconds_max gauge
-http_server_requests_seconds_max{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/metrics",} 1.339804427
-http_server_requests_seconds_max{exception="None",method="GET",outcome="SUCCESS",status="200",uri="/actuator/prometheus",} 0.053689381
-# HELP resilience4j_circuitbreaker_slow_calls The number of slow successful which were slower than a certain threshold
-# TYPE resilience4j_circuitbreaker_slow_calls gauge
-resilience4j_circuitbreaker_slow_calls{kind="successful",name="proxyService",} 0.0
-resilience4j_circuitbreaker_slow_calls{kind="failed",name="proxyService",} 0.0
-# HELP jvm_classes_unloaded_classes_total The total number of classes unloaded since the Java virtual machine has started execution
-# TYPE jvm_classes_unloaded_classes_total counter
-jvm_classes_unloaded_classes_total 0.0
-# HELP process_files_max_files The maximum file descriptor count
-# TYPE process_files_max_files gauge
-process_files_max_files 1048576.0
-# HELP resilience4j_circuitbreaker_calls_seconds Total number of successful calls
-# TYPE resilience4j_circuitbreaker_calls_seconds summary
-resilience4j_circuitbreaker_calls_seconds_count{kind="successful",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_sum{kind="successful",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_count{kind="failed",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_sum{kind="failed",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_count{kind="ignored",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_sum{kind="ignored",name="proxyService",} 0.0
-# HELP resilience4j_circuitbreaker_calls_seconds_max Total number of successful calls
-# TYPE resilience4j_circuitbreaker_calls_seconds_max gauge
-resilience4j_circuitbreaker_calls_seconds_max{kind="successful",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_max{kind="failed",name="proxyService",} 0.0
-resilience4j_circuitbreaker_calls_seconds_max{kind="ignored",name="proxyService",} 0.0
-# HELP zipkin_reporter_spans_total Spans reported
-# TYPE zipkin_reporter_spans_total counter
-zipkin_reporter_spans_total 5.0
-# HELP zipkin_reporter_queue_bytes Total size of all encoded spans queued for reporting
-# TYPE zipkin_reporter_queue_bytes gauge
-zipkin_reporter_queue_bytes 0.0
-# HELP tomcat_sessions_expired_sessions_total  
-# TYPE tomcat_sessions_expired_sessions_total counter
-tomcat_sessions_expired_sessions_total 0.0
-# HELP tomcat_sessions_alive_max_seconds  
-# TYPE tomcat_sessions_alive_max_seconds gauge
-tomcat_sessions_alive_max_seconds 0.0
-# HELP process_uptime_seconds The uptime of the Java virtual machine
-# TYPE process_uptime_seconds gauge
-process_uptime_seconds 224.402
-# HELP tomcat_sessions_active_max_sessions  
-# TYPE tomcat_sessions_active_max_sessions gauge
-tomcat_sessions_active_max_sessions 0.0
-# HELP process_cpu_usage The "recent cpu usage" for the Java Virtual Machine process
-# TYPE process_cpu_usage gauge
-process_cpu_usage 5.625879043600563E-4
-# HELP jvm_gc_memory_promoted_bytes_total Count of positive increases in the size of the old generation memory pool before GC to after GC
-# TYPE jvm_gc_memory_promoted_bytes_total counter
-jvm_gc_memory_promoted_bytes_total 1.7851088E7
-# HELP logback_events_total Number of error level events that made it to the logs
-# TYPE logback_events_total counter
-logback_events_total{level="warn",} 5.0
-logback_events_total{level="debug",} 79.0
-logback_events_total{level="error",} 0.0
-logback_events_total{level="trace",} 0.0
-logback_events_total{level="info",} 60.0
-# HELP tomcat_sessions_created_sessions_total  
-# TYPE tomcat_sessions_created_sessions_total counter
-tomcat_sessions_created_sessions_total 0.0
-# HELP jvm_threads_live_threads The current number of live threads including both daemon and non-daemon threads
-# TYPE jvm_threads_live_threads gauge
-jvm_threads_live_threads 25.0
-# HELP jvm_threads_states_threads The current number of threads having NEW state
-# TYPE jvm_threads_states_threads gauge
-jvm_threads_states_threads{state="runnable",} 6.0
-jvm_threads_states_threads{state="blocked",} 0.0
-jvm_threads_states_threads{state="waiting",} 8.0
-jvm_threads_states_threads{state="timed-waiting",} 11.0
-jvm_threads_states_threads{state="new",} 0.0
-jvm_threads_states_threads{state="terminated",} 0.0
-# HELP tomcat_sessions_rejected_sessions_total  
-# TYPE tomcat_sessions_rejected_sessions_total counter
-tomcat_sessions_rejected_sessions_total 0.0
-# HELP process_start_time_seconds Start time of the process since unix epoch.
-# TYPE process_start_time_seconds gauge
-process_start_time_seconds 1.64088634006E9
-# HELP resilience4j_circuitbreaker_buffered_calls The number of buffered failed calls stored in the ring buffer
-# TYPE resilience4j_circuitbreaker_buffered_calls gauge
-resilience4j_circuitbreaker_buffered_calls{kind="successful",name="proxyService",} 0.0
-resilience4j_circuitbreaker_buffered_calls{kind="failed",name="proxyService",} 0.0
-# HELP jvm_memory_max_bytes The maximum amount of memory in bytes that can be used for memory management
-# TYPE jvm_memory_max_bytes gauge
-jvm_memory_max_bytes{area="nonheap",id="CodeHeap 'profiled nmethods'",} 1.22908672E8
-jvm_memory_max_bytes{area="heap",id="G1 Survivor Space",} -1.0
-jvm_memory_max_bytes{area="heap",id="G1 Old Gen",} 5.182062592E9
-jvm_memory_max_bytes{area="nonheap",id="Metaspace",} -1.0
-jvm_memory_max_bytes{area="nonheap",id="CodeHeap 'non-nmethods'",} 5836800.0
-jvm_memory_max_bytes{area="heap",id="G1 Eden Space",} -1.0
-jvm_memory_max_bytes{area="nonheap",id="Compressed Class Space",} 1.073741824E9
-jvm_memory_max_bytes{area="nonheap",id="CodeHeap 'non-profiled nmethods'",} 1.22912768E8
-# HELP jvm_memory_committed_bytes The amount of memory in bytes that is committed for the Java virtual machine to use
-# TYPE jvm_memory_committed_bytes gauge
-jvm_memory_committed_bytes{area="nonheap",id="CodeHeap 'profiled nmethods'",} 1.6646144E7
-jvm_memory_committed_bytes{area="heap",id="G1 Survivor Space",} 2.4117248E7
-jvm_memory_committed_bytes{area="heap",id="G1 Old Gen",} 1.7301504E8
-jvm_memory_committed_bytes{area="nonheap",id="Metaspace",} 7.6857344E7
-jvm_memory_committed_bytes{area="nonheap",id="CodeHeap 'non-nmethods'",} 2555904.0
-jvm_memory_committed_bytes{area="heap",id="G1 Eden Space",} 2.71581184E8
-jvm_memory_committed_bytes{area="nonheap",id="Compressed Class Space",} 1.0354688E7
-jvm_memory_committed_bytes{area="nonheap",id="CodeHeap 'non-profiled nmethods'",} 6619136.0
-# HELP jvm_memory_used_bytes The amount of used memory
-# TYPE jvm_memory_used_bytes gauge
-jvm_memory_used_bytes{area="nonheap",id="CodeHeap 'profiled nmethods'",} 1.6585088E7
-jvm_memory_used_bytes{area="heap",id="G1 Survivor Space",} 2.4117248E7
-jvm_memory_used_bytes{area="heap",id="G1 Old Gen",} 2.0524392E7
-jvm_memory_used_bytes{area="nonheap",id="Metaspace",} 7.4384552E7
-jvm_memory_used_bytes{area="nonheap",id="CodeHeap 'non-nmethods'",} 1261696.0
-jvm_memory_used_bytes{area="heap",id="G1 Eden Space",} 2.5165824E7
-jvm_memory_used_bytes{area="nonheap",id="Compressed Class Space",} 9365664.0
-jvm_memory_used_bytes{area="nonheap",id="CodeHeap 'non-profiled nmethods'",} 6604416.0
-# HELP system_load_average_1m The sum of the number of runnable entities queued to available processors and the number of runnable entities running on the available processors averaged over a period of time
-# TYPE system_load_average_1m gauge
-system_load_average_1m 8.68
-# HELP resilience4j_circuitbreaker_state The states of the circuit breaker
-# TYPE resilience4j_circuitbreaker_state gauge
-resilience4j_circuitbreaker_state{name="proxyService",state="forced_open",} 0.0
-resilience4j_circuitbreaker_state{name="proxyService",state="closed",} 1.0
-resilience4j_circuitbreaker_state{name="proxyService",state="disabled",} 0.0
-resilience4j_circuitbreaker_state{name="proxyService",state="open",} 0.0
-resilience4j_circuitbreaker_state{name="proxyService",state="half_open",} 0.0
-resilience4j_circuitbreaker_state{name="proxyService",state="metrics_only",} 0.0
-# HELP jvm_buffer_memory_used_bytes An estimate of the memory that the Java virtual machine is using for this buffer pool
-# TYPE jvm_buffer_memory_used_bytes gauge
-jvm_buffer_memory_used_bytes{id="mapped",} 0.0
-jvm_buffer_memory_used_bytes{id="direct",} 24576.0
-# HELP resilience4j_circuitbreaker_failure_rate The failure rate of the circuit breaker
-# TYPE resilience4j_circuitbreaker_failure_rate gauge
-resilience4j_circuitbreaker_failure_rate{name="proxyService",} -1.0
-# HELP zipkin_reporter_queue_spans Spans queued for reporting
-# TYPE zipkin_reporter_queue_spans gauge
-zipkin_reporter_queue_spans 0.0
-# HELP jvm_gc_memory_allocated_bytes_total Incremented for an increase in the size of the (young) heap memory pool after one GC to before the next
-# TYPE jvm_gc_memory_allocated_bytes_total counter
-jvm_gc_memory_allocated_bytes_total 1.402994688E9
-# HELP jvm_buffer_count_buffers An estimate of the number of buffers in the pool
-# TYPE jvm_buffer_count_buffers gauge
-jvm_buffer_count_buffers{id="mapped",} 0.0
-jvm_buffer_count_buffers{id="direct",} 3.0
-# HELP jvm_threads_peak_threads The peak live thread count since the Java virtual machine started or peak was reset
-# TYPE jvm_threads_peak_threads gauge
-jvm_threads_peak_threads 25.0
-# HELP jvm_gc_max_data_size_bytes Max size of long-lived heap memory pool
-# TYPE jvm_gc_max_data_size_bytes gauge
-jvm_gc_max_data_size_bytes 5.182062592E9
+port install kubeseal
 ```
 
-#### Check All Services Health
-From ecommerce front Service proxy we can check all the core services health when you have all the
- microservices up and running using Docker Compose,
-```bash
-selim@:~/ecommerce-microservice-backend-app$ curl -k https://localhost:8443/actuator/health -s | jq .components."\"Core Microservices\""
-```
-This will result in the following response:
-```json
-{
-    "status": "UP",
-    "components": {
-        "circuitBreakers": {
-            "status": "UP",
-            "details": {
-                "proxyService": {
-                    "status": "UP",
-                    "details": {
-                        "failureRate": "-1.0%",
-                        "failureRateThreshold": "50.0%",
-                        "slowCallRate": "-1.0%",
-                        "slowCallRateThreshold": "100.0%",
-                        "bufferedCalls": 0,
-                        "slowCalls": 0,
-                        "slowFailedCalls": 0,
-                        "failedCalls": 0,
-                        "notPermittedCalls": 0,
-                        "state": "CLOSED"
-                    }
-                }
-            }
-        },
-        "clientConfigServer": {
-            "status": "UNKNOWN",
-            "details": {
-                "error": "no property sources located"
-            }
-        },
-        "discoveryComposite": {
-            "status": "UP",
-            "components": {
-                "discoveryClient": {
-                    "status": "UP",
-                    "details": {
-                        "services": [
-                            "proxy-client",
-                            "api-gateway",
-                            "cloud-config",
-                            "product-service",
-                            "user-service",
-                            "favourite-service",
-                            "order-service",
-                            "payment-service",
-                            "shipping-service"
-                        ]
-                    }
-                },
-                "eureka": {
-                    "description": "Remote status from Eureka server",
-                    "status": "UP",
-                    "details": {
-                        "applications": {
-                            "FAVOURITE-SERVICE": 1,
-                            "PROXY-CLIENT": 1,
-                            "API-GATEWAY": 1,
-                            "PAYMENT-SERVICE": 1,
-                            "ORDER-SERVICE": 1,
-                            "CLOUD-CONFIG": 1,
-                            "PRODUCT-SERVICE": 1,
-                            "SHIPPING-SERVICE": 1,
-                            "USER-SERVICE": 1
-                        }
-                    }
-                }
-            }
-        },
-        "diskSpace": {
-            "status": "UP",
-            "details": {
-                "total": 981889826816,
-                "free": 325116776448,
-                "threshold": 10485760,
-                "exists": true
-            }
-        },
-        "ping": {
-            "status": "UP"
-        },
-        "refreshScope": {
-            "status": "UP"
-        }
-    }
-}
-```
-### Testing Them All
-Now it's time to test all the application functionality as one part. To do so just run
- the following automation test script:
+#### Nixpkgs
+
+The `kubeseal` client is also available on [Nixpkgs](https://search.nixos.org/packages?channel=unstable&show=kubeseal&from=0&size=50&sort=relevance&type=packages&query=kubeseal): (**DISCLAIMER**: Not maintained by bitnami-labs)
 
 ```bash
-selim@:~/ecommerce-microservice-backend-app$ ./test-em-all.sh start
+nix-env -iA nixpkgs.kubeseal
 ```
-> You can use `stop` switch with `start`, that will 
->1. start docker, 
->2. run the tests, 
->3. stop the docker instances.
 
-The result will look like this:
+#### Linux
+
+The `kubeseal` client can be installed on Linux, using the below commands:
 
 ```bash
-Starting 'ecommerce-microservice-backend-app' for [Blackbox] testing...
-
-Start Tests: Tue, May 31, 2020 2:09:36 AM
-HOST=localhost
-PORT=8080
-Restarting the test environment...
-$ docker-compose -p -f compose.yml down --remove-orphans
-$ docker-compose -p -f compose.yml up -d
-Wait for: curl -k https://localhost:8080/actuator/health... , retry #1 , retry #2, {"status":"UP"} DONE, continues...
-Test OK (HTTP Code: 200)
-...
-Test OK (actual value: 1)
-Test OK (actual value: 3)
-Test OK (actual value: 3)
-Test OK (HTTP Code: 404, {"httpStatus":"NOT_FOUND","message":"No product found for productId: 13","path":"/app/api/products/20","time":"2020-04-12@12:34:25.144+0000"})
-...
-Test OK (actual value: 3)
-Test OK (actual value: 0)
-Test OK (HTTP Code: 422, {"httpStatus":"UNPROCESSABLE_ENTITY","message":"Invalid productId: -1","path":"/app/api/products/-1","time":"2020-04-12@12:34:26.243+0000"})
-Test OK (actual value: "Invalid productId: -1")
-Test OK (HTTP Code: 400, {"timestamp":"2020-04-12T12:34:26.471+00:00","path":"/app/api/products/invalidProductId","status":400,"error":"Bad Request","message":"Type mismatch.","requestId":"044dcdf2-13"})
-Test OK (actual value: "Type mismatch.")
-Test OK (HTTP Code: 401, )
-Test OK (HTTP Code: 200)
-Test OK (HTTP Code: 403, )
-Start Circuit Breaker tests!
-Test OK (actual value: CLOSED)
-Test OK (HTTP Code: 500, {"timestamp":"2020-05-26T00:09:48.784+00:00","path":"/app/api/products/2","status":500,"error":"Internal Server Error","message":"Did not observe any item or terminal signal within 2000ms in 'onErrorResume' (and no fallback has been configured)","requestId":"4aa9f5e8-119"})
-...
-Test OK (actual value: Did not observe any item or terminal signal within 2000ms)
-Test OK (HTTP Code: 200)
-Test OK (actual value: Fallback product2)
-Test OK (HTTP Code: 200)
-Test OK (actual value: Fallback product2)
-Test OK (HTTP Code: 404, {"httpStatus":"NOT_FOUND","message":"Product Id: 14 not found in fallback cache!","path":"/app/api/products/14","timestamp":"2020-05-26@00:09:53.998+0000"})
-...
-Test OK (actual value: product name C)
-Test OK (actual value: CLOSED)
-Test OK (actual value: CLOSED_TO_OPEN)
-Test OK (actual value: OPEN_TO_HALF_OPEN)
-Test OK (actual value: HALF_OPEN_TO_CLOSED)
-End, all tests OK: Tue, May 31, 2020 2:10:09 AM
+KUBESEAL_VERSION='' # Set this to, for example, KUBESEAL_VERSION='0.23.0'
+wget "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${KUBESEAL_VERSION:?}/kubeseal-${KUBESEAL_VERSION:?}-linux-amd64.tar.gz"
+tar -xvzf kubeseal-${KUBESEAL_VERSION:?}-linux-amd64.tar.gz kubeseal
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
 ```
-### Tracking the services with Zipkin
-Now, you can now track Microservices interactions throughout Zipkin UI from the following link:
-[http://localhost:9411/zipkin/](http://localhost:9411/zipkin/)
-![Zipkin UI](zipkin-dash.png)
 
-### Closing The Story
+If you have `curl` and `jq` installed on your machine, you can get the version dynamically this way. This can be useful for environments used in automation and such.
 
-Finally, to close the story, we need to shut down Microservices manually service by service, hahaha just kidding, run the following command to shut them all:
+```
+# Fetch the latest sealed-secrets version using GitHub API
+KUBESEAL_VERSION=$(curl -s https://api.github.com/repos/bitnami-labs/sealed-secrets/tags | jq -r '.[0].name' | cut -c 2-)
+
+# Check if the version was fetched successfully
+if [ -z "$KUBESEAL_VERSION" ]; then
+    echo "Failed to fetch the latest KUBESEAL_VERSION"
+    exit 1
+fi
+
+wget "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${KUBESEAL_VERSION}/kubeseal-${KUBESEAL_VERSION}-linux-amd64.tar.gz"
+tar -xvzf kubeseal-${KUBESEAL_VERSION}-linux-amd64.tar.gz kubeseal
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+```
+
+where `KUBESEAL_VERSION` is the [version tag](https://github.com/bitnami-labs/sealed-secrets/tags) of the kubeseal release you want to use. For example: `v0.18.0`.
+
+#### Installation from source
+
+If you just want the latest client tool, it can be installed into
+`$GOPATH/bin` with:
 
 ```bash
-selim@:~/ecommerce-microservice-backend-app$ docker-compose -f compose.yml down --remove-orphans
+go install github.com/bitnami-labs/sealed-secrets/cmd/kubeseal@main
 ```
- And you should see output like the following:
+
+You can specify a release tag or a commit SHA instead of `main`.
+
+The `go install` command will place the `kubeseal` binary at `$GOPATH/bin`:
 
 ```bash
-Removing ecommerce-microservice-backend-app_payment-service-container_1   ... done
-Removing ecommerce-microservice-backend-app_zipkin-container_1            ... done
-Removing ecommerce-microservice-backend-app_service-discovery-container_1 ... done
-Removing ecommerce-microservice-backend-app_product-service-container_1   ... done
-Removing ecommerce-microservice-backend-app_cloud-config-container_1      ... done
-Removing ecommerce-microservice-backend-app_proxy-client-container_1      ... done
-Removing ecommerce-microservice-backend-app_order-service-container_1     ... done
-Removing ecommerce-microservice-backend-app_user-service-container_1      ... done
-Removing ecommerce-microservice-backend-app_shipping-service-container_1  ... done
-Removing ecommerce-microservice-backend-app_api-gateway-container_1       ... done
-Removing ecommerce-microservice-backend-app_favourite-service-container_1 ... done
-Removing network ecommerce-microservice-backend-app_default
+$(go env GOPATH)/bin/kubeseal
 ```
-### The End
-In the end, I hope you enjoyed the application and find it useful, as I did when I was developing it. 
-If you would like to enhance, please: 
-- **Open PRs**, 
-- Give **feedback**, 
-- Add **new suggestions**, and
-- Finally, give it a 🌟.
 
-*Happy Coding ...* 🙂
+## Upgrade
+
+Don't forget to check the [release notes](RELEASE-NOTES.md) for guidance about
+possible breaking changes when you upgrade the client tool
+and/or the controller.
+
+### Supported Versions
+Currently, only the latest version of Sealed Secrets is supported for production environments.
+
+### Compatibility with Kubernetes versions
+The Sealed Secrets controller ensures compatibility with different versions of Kubernetes by relying on a stable Kubernetes API. Typically, Kubernetes versions above 1.16 are considered compatible. However, we officially support the [currently recommended Kubernetes versions](https://kubernetes.io/releases/). Additionally, versions above 1.24 undergo thorough verification through our CI process with every release.
+
+## Usage
+
+```bash
+# Create a json/yaml-encoded Secret somehow:
+# (note use of `--dry-run` - this is just a local file!)
+echo -n bar | kubectl create secret generic mysecret --dry-run=client --from-file=foo=/dev/stdin -o json >mysecret.json
+
+# This is the important bit:
+# (note default format is json!)
+kubeseal <mysecret.json >mysealedsecret.json
+
+# At this point mysealedsecret.json is safe to upload to Github,
+# post on Twitter, etc.
+
+# Eventually:
+kubectl create -f mysealedsecret.json
+
+# Profit!
+kubectl get secret mysecret
+```
+
+Note the `SealedSecret` and `Secret` must have **the same namespace and
+name**. This is a feature to prevent other users on the same cluster
+from re-using your sealed secrets. See the [Scopes](#scopes) section for more info.
+
+`kubeseal` reads the namespace from the input secret, accepts an explicit `--namespace` argument, and uses
+the `kubectl` default namespace (in that order). Any labels,
+annotations, etc on the original `Secret` are preserved, but not
+automatically reflected in the `SealedSecret`.
+
+By design, this scheme *does not authenticate the user*. In other
+words, *anyone* can create a `SealedSecret` containing any `Secret`
+they like (provided the namespace/name matches). It is up to your
+existing config management workflow, cluster RBAC rules, etc to ensure
+that only the intended `SealedSecret` is uploaded to the cluster. The
+only change from existing Kubernetes is that the *contents* of the
+`Secret` are now hidden while outside the cluster.
+
+### Managing existing secrets
+
+If you want the Sealed Secrets controller to manage an existing `Secret`, you can annotate your `Secret` with the `sealedsecrets.bitnami.com/managed: "true"` annotation. The existing `Secret` will be overwritten when unsealing a `SealedSecret` with the same name and namespace, and the `SealedSecret` will take ownership of the `Secret` (so that when the `SealedSecret` is deleted the `Secret` will also be deleted).
+
+### Patching existing secrets
+
+> New in v0.23.0
+
+There are some use cases in which you don't want to replace the whole `Secret` but just add or modify some keys from the existing `Secret`. For this, you can annotate your `Secret` with `sealedsecrets.bitnami.com/patch: "true"`. Using this annotation will make sure that secret keys, labels and annotations in the `Secret` that are not present in the `SealedSecret` won't be deleted, and those present in the `SealedSecret` will be added to the `Secret` (secret keys, labels and annotations that exist both in the `Secret` and the `SealedSecret` will be modified by the `SealedSecret`).
+
+This annotation does not make the `SealedSecret` take ownership of the `Secret`. You can add both the `patch` and `managed` annotations to obtain the patching behavior while also taking ownership of the `Secret`.
+
+### Seal secret which can skip set owner references
+
+If you want `SealedSecret` and the `Secret` to be independent, which mean when you delete the `SealedSecret` the `Secret` won't disappear with it, then you have to annotate that Secret with the annotation `sealedsecrets.bitnami.com/skip-set-owner-references: "true"` ahead of applying the Usage steps. You still may also add `sealedsecrets.bitnami.com/managed: "true"` to your `Secret` so that your secret will be updated when `SealedSecret` is updated.
+
+### Update existing secrets
+
+If you want to add or update existing sealed secrets without having the cleartext for the other items,
+you can just copy&paste the new encrypted data items and merge it into an existing sealed secret.
+
+You must take care of sealing the updated items with a compatible name and namespace (see note about scopes above).
+
+You can use the `--merge-into` command to update an existing sealed secrets if you don't want to copy&paste:
+
+```bash
+echo -n bar | kubectl create secret generic mysecret --dry-run=client --from-file=foo=/dev/stdin -o json \
+  | kubeseal > mysealedsecret.json
+echo -n baz | kubectl create secret generic mysecret --dry-run=client --from-file=bar=/dev/stdin -o json \
+  | kubeseal --merge-into mysealedsecret.json
+```
+
+### Raw mode (experimental)
+
+Creating temporary Secret with the `kubectl` command, only to throw it away once piped to `kubeseal` can
+be a quite unfriendly user experience. We're working on an overhaul of the CLI experience. In the meantime,
+we offer an alternative mode where kubeseal only cares about encrypting a value to stdout, and it's your responsibility to put it inside a `SealedSecret` resource (not unlike any of the other k8s resources).
+
+It can also be useful as a building block for editor/IDE integrations.
+
+The downside is that you have to be careful to be consistent with the sealing scope, the namespace and the name.
+
+See [Scopes](#scopes)
+
+`strict` scope (default):
+
+```console
+$ echo -n foo | kubeseal --raw --namespace bar --name mysecret
+AgBChHUWLMx...
+```
+
+`namespace-wide` scope:
+
+```console
+$ echo -n foo | kubeseal --raw --namespace bar --scope namespace-wide
+AgAbbFNkM54...
+```
+Include the `sealedsecrets.bitnami.com/namespace-wide` annotation in the `SealedSecret`
+```yaml
+metadata:
+  annotations:
+    sealedsecrets.bitnami.com/namespace-wide: "true"
+```
+
+`cluster-wide` scope:
+
+```console
+$ echo -n foo | kubeseal --raw --scope cluster-wide
+AgAjLKpIYV+...
+```
+Include the `sealedsecrets.bitnami.com/cluster-wide` annotation in the `SealedSecret`
+```yaml
+metadata:
+  annotations:
+    sealedsecrets.bitnami.com/cluster-wide: "true"
+```
+
+### Validate a Sealed Secret
+
+If you want to validate an existing sealed secret, `kubeseal` has the flag `--validate` to help you.
+
+Giving a file named `sealed-secrets.yaml` containing the following sealed secret:
+
+```yaml
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mysecret
+  namespace: mynamespace
+spec:
+  encryptedData:
+    foo: AgBy3i4OJSWK+PiTySYZZA9rO43cGDEq.....
+```
+
+You can validate if the sealed secret was properly created or not:
+
+```console
+$ cat sealed-secrets.yaml | kubeseal --validate
+```
+
+In case of an invalid sealed secret, `kubeseal` will show:
+
+```console
+$ cat sealed-secrets.yaml | kubeseal --validate
+error: unable to decrypt sealed secret
+```
+
+## Secret Rotation
+
+You should always rotate your secrets. But since your secrets are encrypted with another secret,
+you need to understand how these two layers relate to take the right decisions.
+
+TL;DR:
+
+> If a *sealing* private key is compromised, you need to follow the instructions below in "Early key renewal"
+> section before rotating any of your actual secret values.
+>
+> SealedSecret key renewal and re-encryption features are **not a substitute** for periodical rotation of your actual secret values.
+
+### Sealing key renewal
+
+Sealing keys are automatically renewed every 30 days. Which means a new sealing key is created and appended to the set of active sealing keys the controller can use to unseal `SealedSecret` resources.
+
+The most recently created sealing key is the one used to seal new secrets when you use `kubeseal` and it's the one whose certificate is downloaded when you use `kubeseal --fetch-cert`.
+
+The renewal time of 30 days is a reasonable default, but it can be tweaked as needed
+with the `--key-renew-period=<value>` flag for the command in the pod template of the `SealedSecret` controller. The `value` field can be given as golang
+duration flag (eg: `720h30m`). Assuming that you've installed Sealed Secrets into the `kube-system` namespace, use the following command to edit the Deployment controller, and add the `--key-renew-period` parameter. Once you close your text editor, and the Deployment controller has been modified, a new Pod will be automatically created to replace the old Pod.
+
+```
+kubectl edit deployment/sealed-secrets-controller --namespace=kube-system
+```
+
+A value of `0` will deactivate automatic key renewal. Of course, you may have a valid use case for deactivating automatic sealing key renewal but experience has shown that new users often tend to jump to conclusions that they want control over key renewal, before fully understanding how sealed secrets work. Read more about this in the [common misconceptions](#common-misconceptions-about-key-renewal) section below.
+
+> Unfortunately, you cannot use e.g. "d" as a unit for days because that's not supported by the Go stdlib. Instead of hitting your face with a palm, take this as an opportunity to meditate on the [falsehoods programmers believe about time](https://infiniteundo.com/post/25326999628/falsehoods-programmers-believe-about-time).
+
+A common misunderstanding is that key renewal is often thought of as a form of key rotation, where the old key is not only obsolete but actually bad and that you thus want to get rid of it.
+It doesn't help that this feature has been historically called "key rotation", which can add to the confusion.
+
+Sealed secrets are not automatically rotated and old keys are not deleted
+when new keys are generated. Old `SealedSecret` resources can be still decrypted (that's because old sealing keys are not deleted).
+
+### User secret rotation
+
+The *sealing key* renewal and SealedSecret rotation are **not a substitute** for rotating your actual secrets.
+
+A core value proposition of this tool is:
+
+> Encrypt your Secret into a SealedSecret, which *is* safe to store - even inside a public repository.
+
+If you store anything in a version control storage, and in a public one in particular, you must assume
+you cannot ever delete that information.
+
+*If* a sealing key somehow leaks out of the cluster you must consider all your `SealedSecret` resources
+encrypted with that key as compromised. No amount of sealing key rotation in the cluster or even re-encryption of existing SealedSecrets files can change that.
+
+The best practice is to periodically rotate all your actual secrets (e.g. change the password) **and** craft new
+`SealedSecret` resources with those new secrets.
+
+But if the `SealedSecret` controller was not renewing the *sealing key* that rotation would be moot,
+since the attacker could just decrypt the new secrets as well. Thus, you need to do both: periodically renew the sealing key and rotate your actual secrets!
+
+### Early key renewal
+
+If you know or suspect a *sealing key* has been compromised you should renew the key ASAP before you
+start sealing your new rotated secrets, otherwise you'll be giving attackers access to your new secrets as well.
+
+A key can be generated early by passing the current timestamp to the controller into a flag called `--key-cutoff-time` or an env var called `SEALED_SECRETS_KEY_CUTOFF_TIME`. The expected format is RFC1123, you can generate it with the `date -R` unix command.
+
+### Common misconceptions about key renewal
+
+Sealed secrets sealing keys are not access control keys (e.g. a password). They are more like the GPG key you might use to read encrypted mail sent to you. Let's continue with the email analogy for a bit:
+
+Imagine you have reasons to believe your private GPG key might have been compromised. You'd have more to lose than to gain if the first thing you do is just delete your private key. All the previous emails sent with that key are no longer accessible to you (unless you have a decrypted copy of those emails), nor are new emails sent by your friends whom you have not yet managed to tell to use the new key.
+
+Sure, the content of those encrypted emails is not secure, as an attacker might now be able to decrypt them, but what's done is done. Your sudden loss of the ability to read those emails surely doesn't undo the damage. If anything, it's worse because you no longer know for sure what secret the attacker got to know. What you really want to do is to make sure that your friend stops using your old key and that from now on all further communication is encrypted with a new key pair (i.e. your friend must know about that new key).
+
+The same logic applies to SealedSecrets. The ultimate goal is to secure your actual "user" secrets. The "sealing" secrets are just a mechanism, an "envelope". If a secret is leaked there is no going back, what's done is done.
+
+You first need to ensure that new secrets don't get encrypted with that old compromised key (in the email analogy above that's: create a new key pair and give all your friends your new public key).
+
+The second logical step is to neutralize the damage, which depends on the nature of the secret. A simple example is a database password: if you accidentally leak your database password, the thing you're supposed to do is simply to change your database password (on the database; and revoke the old one!) *and* update the `SealedSecret` resource with the new password (i.e. running `kubeseal` again).
+
+Both steps are described in the previous sections, albeit in a less verbose way. There is no shame in reading them again, now that you have a more in-depth grasp of the underlying rationale.
+
+### Manual key management (advanced)
+
+The `SealedSecret` controller and the associated workflow are designed to keep old sealing keys around and periodically add new ones. You should not delete old keys unless you know what you're doing.
+
+That said, if you want you can manually manage (create, move, delete) *sealing keys*. They are just normal k8s secrets living in the same namespace where the `SealedSecret` controller lives (usually `kube-system`, but it's configurable).
+
+There are advanced use cases that you can address by creative management of the sealing keys.
+For example, you can share the same sealing key among a few clusters so that you can apply exactly the same sealed secret in multiple clusters.
+Since sealing keys are just normal k8s secrets you can even use sealed secrets themselves and use a GitOps workflow to manage your sealing keys (useful when you want to share the same key among different clusters)!
+
+Labeling a *sealing key* secret with anything other than `active` effectively deletes
+the key from the `SealedSecret` controller, but it is still available in k8s for
+manual encryption/decryption if need be.
+
+**NOTE** `SealedSecret` controller currently does not automatically pick up manually created, deleted or relabeled sealing keys. An admin must restart the controller before the effect will apply.
+
+### Re-encryption (advanced)
+
+Before you can get rid of some old sealing keys you need to re-encrypt your SealedSecrets with the latest private key.
+
+```bash
+kubeseal --re-encrypt <my_sealed_secret.json >tmp.json \
+  && mv tmp.json my_sealed_secret.json
+```
+
+The invocation above will produce a new sealed secret file freshly encrypted with
+the latest key, without making the secrets leave the cluster to the client. You can then save that file
+in your version control system (`kubeseal --re-encrypt` doesn't update the in-cluster object).
+
+Currently, old keys are not garbage collected automatically.
+
+It's a good idea to periodically re-encrypt your SealedSecrets. But as mentioned above, don't lull yourself in a false sense of security: you must assume the old version of the `SealedSecret` resource (the one encrypted with a key you think of as dead) is still potentially around and accessible to attackers. I.e. re-encryption is not a substitute for periodically rotating your actual secrets.
+
+## Details (advanced)
+
+This controller adds a new `SealedSecret` custom resource. The
+interesting part of a `SealedSecret` is a base64-encoded
+asymmetrically encrypted `Secret`.
+
+The controller maintains a set of private/public key pairs as kubernetes
+secrets. Keys are labeled with `sealedsecrets.bitnami.com/sealed-secrets-key`
+and identified in the label as either `active` or `compromised`. On startup,
+The sealed secrets controller will...
+
+1. Search for these keys and add them to its local store if they are
+labeled as active.
+2. Create a new key
+3. Start the key rotation cycle
+
+### Crypto
+
+More details about crypto can be found [here](docs/developer/crypto.md).
+
+## Developing
+
+Developing guidelines can be found [in the Developer Guide](docs/developer/README.md).
+
+## FAQ
+
+### Can I encrypt multiple secrets at once, in one YAML / JSON file?
+
+Yes, you can! Drop as many secrets as you like in one file. Make sure to separate them via `---` for YAML and as extra, single objects in JSON.
+
+### Will you still be able to decrypt if you no longer have access to your cluster?
+
+No, the private keys are only stored in the Secret managed by the controller (unless you have some other backup of your k8s objects). There are no backdoors - without that private key used to encrypt a given SealedSecrets, you can't decrypt it. If you can't get to the Secrets with the encryption keys, and you also can't get to the decrypted versions of your Secrets live in the cluster, then you will need to regenerate new passwords for everything, seal them again with a new sealing key, etc.
+
+### How can I do a backup of my SealedSecrets?
+
+If you do want to make a backup of the encryption private keys, it's easy to do from an account with suitable access:
+
+```bash
+kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml >main.key
+
+echo "---" >> main.key
+kubectl get secret -n kube-system sealed-secrets-key -o yaml >>main.key
+```
+
+> NOTE: You need the second statement only if you ever installed sealed-secrets older than version 0.9.x on your cluster.
+
+> NOTE: This file will contain the controller's public + private keys and should be kept omg-safe!
+
+To restore from a backup after some disaster, just put that secrets back before starting the controller - or if the controller was already started, replace the newly-created secrets and restart the controller:
+
+```bash
+kubectl apply -f main.key
+kubectl delete pod -n kube-system -l name=sealed-secrets-controller
+```
+
+### Can I decrypt my secrets offline with a backup key?
+
+While treating sealed-secrets as long term storage system for secrets is not the recommended use case, some people
+do have a legitimate requirement for being able to recover secrets when the k8s cluster is down and restoring a backup into a new `SealedSecret` controller deployment is not practical.
+
+If you have backed up one or more of your private keys (see previous question), you can use the `kubeseal --recovery-unseal --recovery-private-key file1.key,file2.key,...` command to decrypt a sealed secrets file.
+
+### What flags are available for kubeseal?
+
+You can check the flags available using `kubeseal --help`.
+
+### How do I update parts of JSON/YAML/TOML/.. file encrypted with sealed secrets?
+
+A kubernetes `Secret` resource contains multiple items, basically a flat map of key/value pairs.
+SealedSecrets operate at that level, and does not care what you put in the values. In other words
+it cannot make sense of any structured configuration file you might have put in a secret and thus
+cannot help you update individual fields in it.
+
+Since this is a common problem, especially when dealing with legacy applications, we do offer an [example](docs/examples/config-template) of a possible workaround.
+
+### Can I bring my own (pre-generated) certificates?
+
+Yes, you can provide the controller with your own certificates, and it will consume them.
+Please check [here](docs/bring-your-own-certificates.md) for a workaround.
+
+### How to use kubeseal if the controller is not running within the `kube-system` namespace?
+
+If you installed the controller in a different namespace than the default `kube-system`, you need to provide this namespace
+to the `kubeseal` commandline tool. There are two options:
+
+1. You can specify the namespace via the command line option `--controller-namespace <namespace>`:
+
+  ```bash
+kubeseal --controller-namespace sealed-secrets <mysecret.json >mysealedsecret.json
+```
+
+2. Via the environment variable `SEALED_SECRETS_CONTROLLER_NAMESPACE`:
+
+  ```bash
+export SEALED_SECRETS_CONTROLLER_NAMESPACE=sealed-secrets
+kubeseal <mysecret.json >mysealedsecret.json
+```
+
+### How to verify the images?
+
+Our images are being signed using [cosign](https://github.com/sigstore/cosign). The signatures have been saved in our [GitHub Container Registry](https://ghcr.io/bitnami-labs/sealed-secrets-controller/signs).
+
+> Images up to and including v0.20.2 were signed using Cosign v1. Newer images are signed with Cosign v2.
+
+It is pretty simple to verify the images:
+
+```bash
+# export the COSIGN_VARIABLE setting up the GitHub container registry signs path
+export COSIGN_REPOSITORY=ghcr.io/bitnami-labs/sealed-secrets-controller/signs
+
+# verify the image uploaded in GHCR
+cosign verify --key .github/workflows/cosign.pub ghcr.io/bitnami-labs/sealed-secrets-controller:latest
+
+# verify the image uploaded in Dockerhub
+cosign verify --key .github/workflows/cosign.pub docker.io/bitnami/sealed-secrets-controller:latest
+```
+
+### How to use one controller for a subset of namespaces
+
+If you want to use one controller for more than one namespace, but not all namespaces, you can provide additional namespaces using the command line flag `--additional-namespaces=<namespace1>,<namespace2>,<...>`. Make sure you provide appropriate roles and rolebindings in the target namespaces, so the controller can manage the secrets in there.
+
+## Community
+
+- [#sealed-secrets on Kubernetes Slack](https://kubernetes.slack.com/messages/sealed-secrets)
+
+Click [here](http://slack.k8s.io) to sign up to the Kubernetes Slack org.
+
+### Related projects
+
+- `kubeseal-convert`: [https://github.com/EladLeev/kubeseal-convert](https://github.com/EladLeev/kubeseal-convert)
+- Visual Studio Code extension: [https://marketplace.visualstudio.com/items?itemName=codecontemplator.kubeseal](https://marketplace.visualstudio.com/items?itemName=codecontemplator.kubeseal)
+- WebSeal: generates secrets in the browser: [https://socialgouv.github.io/webseal](https://socialgouv.github.io/webseal)
+- HybridEncrypt TypeScript implementation: [https://github.com/SocialGouv/aes-gcm-rsa-oaep](https://github.com/SocialGouv/aes-gcm-rsa-oaep)
+- [DEPRACATED] Sealed Secrets Operator: [https://github.com/disposab1e/sealed-secrets-operator-helm](https://github.com/disposab1e/sealed-secrets-operator-helm)

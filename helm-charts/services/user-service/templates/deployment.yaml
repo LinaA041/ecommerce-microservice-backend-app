@@ -32,6 +32,23 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.initContainers.enabled }}
+      initContainers:
+      {{- range .Values.initContainers.waitForServices }}
+      - name: wait-for-{{ .name }}
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for {{ .name }} to be ready..."
+          until nc -z {{ .host }} {{ .port }}; do
+            echo "{{ .name }} ({{ .host }}:{{ .port }}) is unavailable - sleeping"
+            sleep 2
+          done 
+          echo "{{ .name }} is up - continuing"
+      {{- end }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}

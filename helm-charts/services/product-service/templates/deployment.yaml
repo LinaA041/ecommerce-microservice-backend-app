@@ -23,10 +23,39 @@ spec:
       labels:
         {{- include "product-service.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ include "product-service.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.initContainers.enabled }}
+      initContainers:
+      {{- range .Values.initContainers.waitForServices }}
+      - name: wait-for-{{ .name }}
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for {{ .name }} to be ready..."
+          until nc -z {{ .host }} {{ .port }}; do
+            echo "{{ .name }} ({{ .host }}:{{ .port }}) is unavailable - sleeping"
+            sleep 2
+          done
+          echo "{{ .name }} is up - continuing"
+      {{- end }}
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:

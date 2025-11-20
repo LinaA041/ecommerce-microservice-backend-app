@@ -11,3 +11,4 @@ data:
   EUREKA_CLIENT_SERVICEURL_MYZONE: "http://service-discovery:8761/eureka"
   EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://service-discovery:8761/eureka/"
   SPRING_CONFIG_IMPORT: "optional:configserver:http://cloud-config:9296/"
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"

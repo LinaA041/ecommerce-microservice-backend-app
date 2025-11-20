@@ -40,10 +40,22 @@ podLabels:
   app: cloud-config
   tier: infrastructure
 
-podSecurityContext: {}
+podSecurityContext: 
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
   # fsGroup: 2000
 
-securityContext: {}
+securityContext: 
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: false #Changed to false as cloud-config needs to write logs
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
   # capabilities:
   #   drop:
   #   - ALL

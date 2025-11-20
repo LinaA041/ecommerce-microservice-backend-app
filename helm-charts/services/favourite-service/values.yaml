@@ -40,16 +40,22 @@ podLabels:
   app: favourite-service
   tier: backend
 
-podSecurityContext: {}
+podSecurityContext: 
   # fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext: 
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: false #Changed to false as favourite-service needs to write logs
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -153,6 +159,15 @@ volumes: []
 #   secret:
 #     secretName: mysecret
 #     optional: false
+initContainers:
+  enabled: true
+  waitForServices:
+    - name: service-discovery
+      host: service-discovery
+      port: 8761
+    - name: cloud-config
+      host: cloud-config
+      port: 9296
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts: []

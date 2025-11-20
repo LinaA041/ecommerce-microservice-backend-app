@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# TLS private keys (DO NOT COMMIT)
+infrastructure/tls/tls.key
+infrastructure/tls/*.key
+
+# Unsealed secrets
+infrastructure/tls/*-secret.yaml
+infrastructure/secrets/*-secret.yaml
