@@ -11,8 +11,12 @@ spring:
     config:
       server:
         git:
-          uri: https://github.com/SelimHorri/cloud-config-server
-          clone-on-start: true
+          uri: https://github.com/LinaA041/cloud-config-server
+          default-label: ${SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL:master}
+          clone-on-start: ${SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START:true}
+          username: ${SPRING_CLOUD_CONFIG_SERVER_GIT_USERNAME:}
+          password: ${SPRING_CLOUD_CONFIG_SERVER_GIT_PASSWORD:}
+
 
 resilience4j:
   circuitbreaker:

@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rotate-git-secret
+  namespace: dev
+  labels:
+    app: secret-rotation
+    type: git
+spec:
+  # Ejecutar cada 6 meses (180 días) el día 1 a las 3 AM
+  # Nota: Esto requiere crear un NUEVO token en GitHub manualmente antes
+  schedule: "0 3 1 */6 *"
+  
+  # Suspendido por defecto (requiere intervención manual para generar token)
+  suspend: true
+  
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: secret-rotation
+            job: git-rotation
+        spec:
+          serviceAccountName: secret-rotator-sa
+          restartPolicy: OnFailure
+          
+          containers:
+          - name: git-rotator
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "============================================"
+              echo "  Rotación de git credentials"
+              echo "============================================"
+              echo ""
+              echo "RECORDATORIO: Este job requiere un NUEVO token de GitHub"
+              echo "   1. Ve a: https://github.com/settings/tokens"
+              echo "   2. Genera un nuevo token con permisos 'repo' y demás permisos en caso de ser necesarios"
+              echo "   3. Actualiza el secret manualmente con:"
+              echo "      kubectl create secret generic git-credentials \\"
+              echo "        --from-literal=username=LinaA041 \\"
+              echo "        --from-literal=password=NUEVO_TOKEN \\"
+              echo "        --namespace=dev --dry-run=client -o yaml | kubectl apply -f -"
+              echo ""
+              echo "   4. Reinicia cloud-config:"
+              echo "      kubectl rollout restart deployment cloud-config -n dev"
+              echo ""
+              echo "Este job está configurado pero requiere intervención manual."
+              echo "============================================"

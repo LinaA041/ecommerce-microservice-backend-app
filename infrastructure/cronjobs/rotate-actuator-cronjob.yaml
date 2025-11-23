@@ -1,0 +1,76 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rotate-actuator-secret
+  namespace: dev
+  labels:
+    app: secret-rotation
+    type: actuator
+spec:
+  # Ejecutar cada 90 días (cada 3 meses) el día 1 a las 2 AM
+  schedule: "0 2 1 */3 *"
+  
+  # Mantener historial de los últimos 3 jobs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: secret-rotation
+            job: actuator-rotation
+        spec:
+          serviceAccountName: secret-rotator-sa
+          restartPolicy: OnFailure
+          
+          containers:
+          - name: secret-rotator
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              
+              echo "============================================"
+              echo "Rotación automática de Actuator Secret"
+              echo "============================================"
+              echo "Fecha: $(date)"
+              echo ""
+              
+              # Generar nuevo password aleatorio
+              NEW_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+              
+              echo " New password generated"
+              
+              # Actualizar el secret
+              kubectl create secret generic actuator-credentials \
+                --from-literal=username=admin \
+                --from-literal=password=$NEW_PASS \
+                --namespace=dev \
+                --dry-run=client -o yaml | kubectl apply -f -
+              
+              echo "Secret 'actuator-credentials' updated"
+              echo ""
+              
+              # Reiniciar servicios que usan este secret
+              echo "Reiniciando servicios afectados..."
+              
+              SERVICES="payment-service order-service"
+              
+              for service in $SERVICES; do
+                echo "   → Reiniciando $service..."
+                kubectl rollout restart deployment $service -n dev
+              done
+              
+              echo ""
+              echo "✅ Todos los servicios reiniciados"
+              echo ""
+              echo "Próxima rotación: $(date -d '+90 days')"
+              
+              # Log del nuevo password (en producción, esto debería ir a un secret manager)
+              echo ""
+              echo " IMPORTANTE: Nuevo password generado"
+              echo "   (En producción, enviar a secret manager o notificación)"

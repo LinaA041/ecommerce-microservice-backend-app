@@ -57,6 +57,17 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: SPRING_SECURITY_USER_NAME
+            valueFrom:
+              secretKeyRef:
+                name: actuator-credentials
+                key: username
+          - name: SPRING_SECURITY_USER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: actuator-credentials
+                key: password
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}

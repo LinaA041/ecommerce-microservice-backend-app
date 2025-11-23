@@ -3,7 +3,7 @@ name: cloud-config
 description: Spring Cloud Config Server
 type: application
 version: 1.0.0
-appVersion: "0.1.0"
+appVersion: "0.1.1"
 keywords:
   - spring-cloud
   - config-server
