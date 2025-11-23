@@ -40,6 +40,23 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_URI
+            value: {{ .Values.cloudConfig.git.uri | quote }}
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL
+            value: {{ .Values.cloudConfig.git.defaultLabel | default "master" | quote }}
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START
+            value: {{ .Values.cloudConfig.git.cloneOnStart | default "true" | quote }}
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: git-credentials
+                key: username
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: git-credentials
+                key: password
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}

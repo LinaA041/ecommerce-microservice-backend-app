@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-config-env
+  namespace: dev
+data:
+  # Cloud Config NO debe importar configuración de sí mismo
+  SPRING_CONFIG_IMPORT: ""
+
+  EUREKA_CLIENT_REGION: "default"
+  EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT: "myzone"
+  EUREKA_CLIENT_SERVICEURL_MYZONE: "http://service-discovery:8761/eureka"
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://service-discovery:8761/eureka/"
+  
+  EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+  EUREKA_CLIENT_FETCH_REGISTRY: "true"
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+
+  
