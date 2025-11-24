@@ -149,243 +149,243 @@ jobs:
           cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache,mode=max
 
   deploy-core:
-  name: Deploy Core Services (KIND)
-  runs-on: ubuntu-latest
-  needs: docker-build
-  if: github.ref == 'refs/heads/master'
+    name: Deploy Core Services (KIND)
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/master'
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Create KIND cluster
-      uses: helm/kind-action@v1
-      with:
-        cluster_name: ecommerce
-        wait: 3m
-    
-    - name: Verify cluster
-      run: |
-        kubectl cluster-info
-        kubectl get nodes
-    
-    # CARGAR TODAS LAS IMÁGENES EN KIND
-    - name: Pull images from Docker Hub
-      run: |
-        echo " Pulling images from Docker Hub..."
-        TAG=build-${{ github.run_number }}
-        
-        # Hacer login a Docker Hub
-        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-        
-        # Pull todas las imágenes
-        docker pull ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/product-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/user-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/payment-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/order-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG
-        docker pull ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG
-        
-        echo " All images pulled"
-    
-    - name: Load images into KIND
-      run: |
-        echo "Loading images into KIND cluster..."
-        TAG=build-${{ github.run_number }}
-        
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/product-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/user-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/payment-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/order-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG --name ecommerce
-        kind load docker-image ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG --name ecommerce
-        
-        echo "All images loaded into KIND"
-    
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.31.0'
-
-    - name: Setup Helm
-      uses: azure/setup-helm@v3
-      with:
-        version: '3.13.0'
-
-    - name: Create namespace
-      run: |
-        kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-    
-    - name: Create Git credentials secret
-      run: |
-        kubectl create secret generic git-credentials \
-          -n ${{ env.KUBE_NAMESPACE }} \
-          --from-literal=username="${{ secrets.CONFIG_REPO_USERNAME }}" \
-          --from-literal=password="${{ secrets.CONFIG_REPO_PASSWORD }}" \
-          --dry-run=client -o yaml | kubectl apply -f -
-
-    - name: Deploy Cloud Config
-      run: |
-        echo "Deploying Cloud Config..."
-        TAG=build-${{ github.run_number }}
-
-        helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
-          --namespace ${{ env.KUBE_NAMESPACE }} \
-          --set image.repository=${{ env.DOCKER_USERNAME }}/cloud-config \
-          --set image.tag=$TAG \
-          --set image.pullPolicy=IfNotPresent \
-          --wait --timeout 5m
-
-        kubectl wait --for=condition=ready pod \
-          -l app.kubernetes.io/name=cloud-config \
-          -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-        
-        echo "Cloud Config deployed"
-
-    - name: Deploy Service Discovery
-      run: |
-        echo "Deploying Service Discovery..."
-        TAG=build-${{ github.run_number }}
-
-        helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
-          --namespace ${{ env.KUBE_NAMESPACE }} \
-          --set image.repository=${{ env.DOCKER_USERNAME }}/service-discovery \
-          --set image.tag=$TAG \
-          --set image.pullPolicy=IfNotPresent \
-          --wait --timeout 5m
-
-        kubectl wait --for=condition=ready pod \
-          -l app.kubernetes.io/name=service-discovery \
-          -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-        
-        echo "Service Discovery deployed"
-    
-    # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
-    - name: Deploy Business Services
-      run: |
-        echo "Deploying Business Services..."
-        TAG=build-${{ github.run_number }}
-        
-        SERVICES=(
-          "product-service"
-          "user-service"
-          "payment-service"
-          "order-service"
-          "shipping-service"
-          "favourite-service"
-        )
-        
-        for service in "${SERVICES[@]}"; do
-          echo "  → Deploying $service..."
+      - name: Create KIND cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ecommerce
+          wait: 3m
+      
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+      
+      # CARGAR TODAS LAS IMÁGENES EN KIND
+      - name: Pull images from Docker Hub
+        run: |
+          echo " Pulling images from Docker Hub..."
+          TAG=build-${{ github.run_number }}
           
-          helm upgrade --install $service ./helm-charts/business/$service \
+          # Hacer login a Docker Hub
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          
+          # Pull todas las imágenes
+          docker pull ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/product-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/user-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/payment-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/order-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG
+          docker pull ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG
+          
+          echo " All images pulled"
+      
+      - name: Load images into KIND
+        run: |
+          echo "Loading images into KIND cluster..."
+          TAG=build-${{ github.run_number }}
+          
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/product-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/user-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/payment-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/order-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG --name ecommerce
+          kind load docker-image ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG --name ecommerce
+          
+          echo "All images loaded into KIND"
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.31.0'
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Create Git credentials secret
+        run: |
+          kubectl create secret generic git-credentials \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --from-literal=username="${{ secrets.CONFIG_REPO_USERNAME }}" \
+            --from-literal=password="${{ secrets.CONFIG_REPO_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Cloud Config
+        run: |
+          echo "Deploying Cloud Config..."
+          TAG=build-${{ github.run_number }}
+
+          helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
             --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.repository=${{ env.DOCKER_USERNAME }}/$service \
+            --set image.repository=${{ env.DOCKER_USERNAME }}/cloud-config \
             --set image.tag=$TAG \
             --set image.pullPolicy=IfNotPresent \
             --wait --timeout 5m
-          
+
           kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/name=$service \
+            -l app.kubernetes.io/name=cloud-config \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
           
-          echo "  $service deployed"
-        done
-        
-        echo "All business services deployed"
-    
-    - name: Deploy API Gateway
-      run: |
-        echo "Deploying API Gateway..."
-        TAG=build-${{ github.run_number }}
+          echo "Cloud Config deployed"
 
-        helm upgrade --install api-gateway ./helm-charts/core/api-gateway \
-          --namespace ${{ env.KUBE_NAMESPACE }} \
-          --set image.repository=${{ env.DOCKER_USERNAME }}/api-gateway \
-          --set image.tag=$TAG \
-          --set image.pullPolicy=IfNotPresent \
-          --wait --timeout 5m
+      - name: Deploy Service Discovery
+        run: |
+          echo "Deploying Service Discovery..."
+          TAG=build-${{ github.run_number }}
 
-        kubectl wait --for=condition=ready pod \
-          -l app.kubernetes.io/name=api-gateway \
-          -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-        
-        echo "API Gateway deployed"
+          helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.repository=${{ env.DOCKER_USERNAME }}/service-discovery \
+            --set image.tag=$TAG \
+            --set image.pullPolicy=IfNotPresent \
+            --wait --timeout 5m
 
-    - name: Show deployment status
-      run: |
-        echo "================================================"
-        echo "DEPLOYMENT STATUS"
-        echo "================================================"
-        kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -o wide
-        echo ""
-        kubectl get svc -n ${{ env.KUBE_NAMESPACE }}
-        echo "================================================"
-    
-    - name: Health Checks
-      run: |
-        echo "Running health checks..."
-        
-        declare -A SERVICE_PORTS=(
-          ["cloud-config"]="9296"
-          ["service-discovery"]="8761"
-          ["product-service"]="8500"
-          ["user-service"]="8700"
-          ["payment-service"]="8400"
-          ["order-service"]="8600"
-          ["shipping-service"]="8800"
-          ["favourite-service"]="8300"
-          ["api-gateway"]="8080"
-        )
-        
-        FAILED=0
-        
-        for service in "${!SERVICE_PORTS[@]}"; do
-          PORT=${SERVICE_PORTS[$service]}
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=service-discovery \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
           
-          echo "  → Checking $service (port $PORT)..."
+          echo "Service Discovery deployed"
+      
+      # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
+      - name: Deploy Business Services
+        run: |
+          echo "Deploying Business Services..."
+          TAG=build-${{ github.run_number }}
           
-          POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
-            -l app.kubernetes.io/name=$service \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          SERVICES=(
+            "product-service"
+            "user-service"
+            "payment-service"
+            "order-service"
+            "shipping-service"
+            "favourite-service"
+          )
           
-          if [ -z "$POD" ]; then
-            echo " No pod found for $service"
-            FAILED=1
-            continue
+          for service in "${SERVICES[@]}"; do
+            echo "  → Deploying $service..."
+            
+            helm upgrade --install $service ./helm-charts/business/$service \
+              --namespace ${{ env.KUBE_NAMESPACE }} \
+              --set image.repository=${{ env.DOCKER_USERNAME }}/$service \
+              --set image.tag=$TAG \
+              --set image.pullPolicy=IfNotPresent \
+              --wait --timeout 5m
+            
+            kubectl wait --for=condition=ready pod \
+              -l app.kubernetes.io/name=$service \
+              -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+            
+            echo "  $service deployed"
+          done
+          
+          echo "All business services deployed"
+      
+      - name: Deploy API Gateway
+        run: |
+          echo "Deploying API Gateway..."
+          TAG=build-${{ github.run_number }}
+
+          helm upgrade --install api-gateway ./helm-charts/core/api-gateway \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.repository=${{ env.DOCKER_USERNAME }}/api-gateway \
+            --set image.tag=$TAG \
+            --set image.pullPolicy=IfNotPresent \
+            --wait --timeout 5m
+
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=api-gateway \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          
+          echo "API Gateway deployed"
+
+      - name: Show deployment status
+        run: |
+          echo "================================================"
+          echo "DEPLOYMENT STATUS"
+          echo "================================================"
+          kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -o wide
+          echo ""
+          kubectl get svc -n ${{ env.KUBE_NAMESPACE }}
+          echo "================================================"
+      
+      - name: Health Checks
+        run: |
+          echo "Running health checks..."
+          
+          declare -A SERVICE_PORTS=(
+            ["cloud-config"]="9296"
+            ["service-discovery"]="8761"
+            ["product-service"]="8500"
+            ["user-service"]="8700"
+            ["payment-service"]="8400"
+            ["order-service"]="8600"
+            ["shipping-service"]="8800"
+            ["favourite-service"]="8300"
+            ["api-gateway"]="8080"
+          )
+          
+          FAILED=0
+          
+          for service in "${!SERVICE_PORTS[@]}"; do
+            PORT=${SERVICE_PORTS[$service]}
+            
+            echo "  → Checking $service (port $PORT)..."
+            
+            POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
+              -l app.kubernetes.io/name=$service \
+              -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            
+            if [ -z "$POD" ]; then
+              echo " No pod found for $service"
+              FAILED=1
+              continue
+            fi
+            
+            if kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              sh -c "wget -q -O- http://localhost:$PORT/actuator/health 2>/dev/null" | grep -q '"status":"UP"'; then
+              echo "  $service is healthy"
+            else
+              echo "   $service health check failed"
+              kubectl logs -n ${{ env.KUBE_NAMESPACE }} $POD --tail=30
+              FAILED=1
+            fi
+          done
+          
+          if [ $FAILED -eq 1 ]; then
+            echo "Some health checks failed"
+            exit 1
           fi
           
-          if kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget -q -O- http://localhost:$PORT/actuator/health 2>/dev/null" | grep -q '"status":"UP"'; then
-            echo "  $service is healthy"
-          else
-            echo "   $service health check failed"
-            kubectl logs -n ${{ env.KUBE_NAMESPACE }} $POD --tail=30
-            FAILED=1
-          fi
-        done
-        
-        if [ $FAILED -eq 1 ]; then
-          echo "Some health checks failed"
-          exit 1
-        fi
-        
-        echo "All health checks passed"
-    
-    - name: Rollback on failure
-      if: failure()
-      run: |
-        echo "Deployment failed - showing logs..."
-        kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
-        
-        # Mostrar logs de pods fallidos
-        for pod in $(kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -o name); do
-          echo "=== Logs for $pod ==="
-          kubectl logs -n ${{ env.KUBE_NAMESPACE }} $pod --tail=50 || true
-        done
+          echo "All health checks passed"
+      
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed - showing logs..."
+          kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
+          
+          # Mostrar logs de pods fallidos
+          for pod in $(kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -o name); do
+            echo "=== Logs for $pod ==="
+            kubectl logs -n ${{ env.KUBE_NAMESPACE }} $pod --tail=50 || true
+          done
