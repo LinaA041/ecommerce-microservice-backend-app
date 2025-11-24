@@ -152,7 +152,7 @@ jobs:
   # ============================================
 # JOB 3: Deploy Core Services en KIND
 # ============================================
-deploy-core:
+  deploy-core:
     name: Deploy Core Services (KIND)
     runs-on: ubuntu-latest
     needs: docker-build
