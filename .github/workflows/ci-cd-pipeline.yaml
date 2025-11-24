@@ -148,91 +148,83 @@ jobs:
           cache-from: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache,mode=max
 
+  
   # ============================================
-  # JOB INTERMEDIO - CREACIÓN DE CLUSTER KIND
-  # ============================================
-  create-kind-cluster:
-    name: Create KIND Cluster
+# JOB 3: Deploy Core Services en KIND
+# ============================================
+deploy-core:
+    name: Deploy Core Services (KIND)
     runs-on: ubuntu-latest
     needs: docker-build
+    if: github.ref == 'refs/heads/master'
 
     steps:
-      - name: Create Kubernetes cluster with KIND
+      # 1. Checkout del repositorio
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Crear cluster KIND en este mismo job
+      - name: Create KIND cluster
         uses: helm/kind-action@v1
         with:
           cluster_name: ecommerce
           wait: 2m
 
-      - name: Save kubeconfig
-        run: |
-          mkdir -p kind
-          kind get kubeconfig --name ecommerce > kind/kubeconfig.yaml
-
-      - name: Upload kubeconfig
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubeconfig
-          path: kind/kubeconfig.yaml
-  # ============================================
-  # JOB 3: Deploy Core Services (orden correcto)
-  # ============================================
-  deploy-core:
-    name: Deploy Core Services
-    runs-on: ubuntu-latest
-    needs: create-kind-cluster
-    if: github.ref == 'refs/heads/master'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download kubeconfig
-        uses: actions/download-artifact@v4
-        with:
-          name: kubeconfig
-          path: kind
-
-      - name: Set KUBECONFIG environment variable
-        run: echo "KUBECONFIG=$(pwd)/kind/kubeconfig.yaml" >> $GITHUB_ENV
-
+      # 3. Instalar kubectl
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: 'v1.28.0'
+          version: 'v1.31.0'
 
-      - name: Install Helm
+      # 4. Instalar Helm
+      - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: '3.13.0'
 
+      # 5. Crear namespace si no existe
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      # 6. Deploy Cloud Config
       - name: Deploy Cloud Config
         run: |
           echo "Deploying Cloud Config..."
+
           TAG=build-${{ github.run_number }}
 
           helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
-            --namespace ${{ env.KUBE_NAMESPACE }} --create-namespace \
-            --set image.tag=$TAG --wait --timeout 5m
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=$TAG \
+            --wait --timeout 5m
 
           kubectl wait --for=condition=ready pod \
             -l app.kubernetes.io/name=cloud-config \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
+      # 7. Deploy Service Discovery
       - name: Deploy Service Discovery
         run: |
-          TAG=build-${{ github.run_number }}
           echo "Deploying Service Discovery..."
+
+          TAG=build-${{ github.run_number }}
 
           helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
             --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.tag=$TAG \
             --wait --timeout 5m
-            
+
           kubectl wait --for=condition=ready pod \
             -l app.kubernetes.io/name=service-discovery \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
           echo "Core services deployed successfully"
+
+      # 8. (Opcional) Listar pods para ver el estado
+      - name: List running pods
+        run: kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
+
 
   # ============================================
   # JOB 4: Deploy Business Services (paralelo)
