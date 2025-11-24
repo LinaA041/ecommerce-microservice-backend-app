@@ -169,7 +169,7 @@ jobs:
       - name: Configure kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          echo "${{ secrets.KUBE_CONFIG }}"  > ~/.kube/config
           chmod 600 ~/.kube/config
       
       - name: Install Helm
