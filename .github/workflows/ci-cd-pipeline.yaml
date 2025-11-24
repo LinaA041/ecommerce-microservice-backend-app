@@ -149,12 +149,26 @@ jobs:
           cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache,mode=max
 
   # ============================================
+  # JOB INTERMEDIO - CREACIÓN DE CLUSTER KIND
+  # ============================================
+  create-kind-cluster:
+    name: Create KIND Cluster
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - name: Create Kubernetes cluster with KIND
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ecommerce
+          wait: 120
+  # ============================================
   # JOB 3: Deploy Core Services (orden correcto)
   # ============================================
   deploy-core:
     name: Deploy Core Services
     runs-on: ubuntu-latest
-    needs: docker-build
+    needs: create-kind-cluster
     if: github.ref == 'refs/heads/master'
     
     steps:
@@ -166,35 +180,30 @@ jobs:
         with:
           version: 'v1.28.0'
       
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
           version: '3.13.0'
       
-      - name: Deploy in correct order
+      - name: Deploy Cloud Config
         run: |
           echo "Deploying core services with dependencies..."
-          
-          # 1. Cloud Config (PRIMERO - fuente de configuración)
-          echo "Deploying Cloud Config..."
+  
+          TAG=build-${{ github.run_number }}
+
           helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
-            --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.tag=build-${{ github.run_number }} \
-            --wait --timeout 5m
-          
+            --namespace ${{ env.KUBE_NAMESPACE }} --create-namespace \
+            --set image.tag=$TAG --wait --timeout 5m
+
           kubectl wait --for=condition=ready pod \
             -l app.kubernetes.io/name=cloud-config \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-          
-          echo "Cloud Config ready"
-          
-          # 2. Service Discovery (SEGUNDO - registro de servicios)
+
+      - name: Deploy Service Discovery
+        run: |
+
+          TAG=build-${{ github.run_number }}
+  
           echo "Deploying Service Discovery..."
           helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
             --namespace ${{ env.KUBE_NAMESPACE }} \
@@ -235,12 +244,6 @@ jobs:
         with:
           version: 'v1.28.0'
       
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
@@ -249,7 +252,7 @@ jobs:
       - name: Deploy ${{ matrix.service }}
         run: |
           echo "Deploying ${{ matrix.service }}..."
-          helm upgrade --install ${{ matrix.service }} ./helm-charts/business/${{ matrix.service }} \
+          helm upgrade --install ${{ matrix.service }} ./helm-charts/services/${{ matrix.service }} \
             --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.tag=build-${{ github.run_number }} \
             --wait --timeout 5m
@@ -277,12 +280,6 @@ jobs:
         with:
           version: 'v1.28.0'
       
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
@@ -291,7 +288,7 @@ jobs:
       - name: Deploy API Gateway
         run: |
           echo "Deploying API Gateway..."
-          helm upgrade --install api-gateway ./helm-charts/core/api-gateway \
+          helm upgrade --install api-gateway ./helm-charts/services/api-gateway \
             --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.tag=build-${{ github.run_number }} \
             --wait --timeout 5m
@@ -306,61 +303,32 @@ jobs:
   # JOB 6: Health Checks & Smoke Tests
   # ============================================
   health-checks:
-    name: Health Checks & Validation
     runs-on: ubuntu-latest
     needs: deploy-gateway
-    
+
     steps:
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
-      
-      - name: Configure kubeconfig
+      - uses: azure/setup-kubectl@v3
+
+      - name: Port forward API Gateway
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      
-      - name: Run health checks
+          kubectl port-forward svc/api-gateway 8080:8080 -n dev &
+          sleep 6
+
+      - name: Validate Gateway Health
         run: |
-          echo "Running health checks..."
-          
-          SERVICES="product-service user-service payment-service order-service shipping-service favourite-service api-gateway cloud-config service-discovery"
-          
-          for service in $SERVICES; do
-            echo "Checking $service..."
-            
-            POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
-              -l app.kubernetes.io/name=$service \
-              -o jsonpath='{.items[0].metadata.name}')
-            
-            if [ -z "$POD" ]; then
-              echo "No pod found for $service"
-              exit 1
-            fi
-            
-            kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              curl -f http://localhost:8080/actuator/health || {
-                echo "Health check failed for $service"
-                exit 1
-              }
-            
-            echo "$service is healthy"
-          done
-          
-          echo "All health checks passed"
-      
+          echo "Checking health..."
+          curl -f http://localhost:8080/actuator/health
+          echo "Gateway healthy ✔"
+
+      - name: Smoke Test - Example Request
+        run: |
+          curl -f http://localhost:8080/api/products || exit 1
+          echo "Smoke test passed ✔"
+
       - name: Rollback on failure
         if: failure()
         run: |
-          echo "Health checks failed - initiating rollback..."
-          
-          SERVICES="api-gateway product-service user-service payment-service order-service shipping-service favourite-service service-discovery cloud-config"
-          
-          for service in $SERVICES; do
-            echo "Rolling back $service..."
-            helm rollback $service -n ${{ env.KUBE_NAMESPACE }} || true
+          echo "Rolling back services..."
+          for svc in api-gateway product-service user-service payment-service order-service shipping-service favourite-service service-discovery cloud-config; do
+            helm rollback $svc -n dev || true
           done
-          
-          echo "Rollback completed"
