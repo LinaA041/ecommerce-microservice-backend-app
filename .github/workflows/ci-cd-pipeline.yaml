@@ -186,6 +186,14 @@ jobs:
       - name: Create namespace
         run: |
           kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Create Git credentials secret
+        run: |
+          kubectl create secret generic git-credentials \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --from-literal=username="${{ secrets.CONFIG_REPO_USERNAME }}" \
+            --from-literal=password="${{ secrets.CONFIG_REPO_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       # 6. Deploy Cloud Config
       - name: Deploy Cloud Config
