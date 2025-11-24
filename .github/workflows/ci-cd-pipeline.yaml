@@ -1,0 +1,348 @@
+name: CI/CD Pipeline - Microservicios E-commerce
+
+on:
+  push:
+    branches: [ master, develop ]
+    paths:
+      - '*-service/**'
+      - 'helm-charts/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:  # Permite ejecución manual
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  KUBE_NAMESPACE: dev
+  REGISTRY: docker.io
+
+jobs:
+  # ============================================
+  # JOB 1: Build & Test
+  # ============================================
+  build-and-test:
+    name: Build & Test Microservices
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: product-service, path: product-service }
+          - { name: user-service, path: user-service }
+          - { name: payment-service, path: payment-service }
+          - { name: order-service, path: order-service }
+          - { name: shipping-service, path: shipping-service }
+          - { name: favourite-service, path: favourite-service }
+          - { name: api-gateway, path: api-gateway }
+          - { name: cloud-config, path: cloud-config }
+          - { name: service-discovery, path: service-discovery }
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Build with Maven
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          echo "Building ${{ matrix.service.name }}..."
+          mvn clean package -DskipTests
+          echo "Build completed"
+      
+      - name: Run tests
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          echo "Running tests for ${{ matrix.service.name }}..."
+          mvn test
+          echo "Tests passed"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service.name }}-jar
+          path: ${{ matrix.service.path }}/target/*.jar
+          retention-days: 1
+
+  # ============================================
+  # JOB 2: Docker Build & Push
+  # ============================================
+  docker-build:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        service:
+          - product-service
+          - user-service
+          - payment-service
+          - order-service
+          - shipping-service
+          - favourite-service
+          - api-gateway
+          - cloud-config
+          - service-discovery
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.service }}-jar
+          path: ${{ matrix.service }}/target
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Extract version info
+        id: version
+        run: |
+          echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+          echo "TIMESTAMP=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:latest
+            ${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:build-${{ github.run_number }}
+            ${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:${{ steps.version.outputs.SHORT_SHA }}
+          cache-from: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache,mode=max
+
+  # ============================================
+  # JOB 3: Deploy Core Services (orden correcto)
+  # ============================================
+  deploy-core:
+    name: Deploy Core Services
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+      
+      - name: Deploy in correct order
+        run: |
+          echo "Deploying core services with dependencies..."
+          
+          # 1. Cloud Config (PRIMERO - fuente de configuración)
+          echo "Deploying Cloud Config..."
+          helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=build-${{ github.run_number }} \
+            --wait --timeout 5m
+          
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=cloud-config \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          
+          echo "Cloud Config ready"
+          
+          # 2. Service Discovery (SEGUNDO - registro de servicios)
+          echo "Deploying Service Discovery..."
+          helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=build-${{ github.run_number }} \
+            --wait --timeout 5m
+          
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=service-discovery \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          
+          echo "Service Discovery ready"
+          echo "Core services deployed successfully"
+
+  # ============================================
+  # JOB 4: Deploy Business Services (paralelo)
+  # ============================================
+  deploy-business:
+    name: Deploy Business Services
+    runs-on: ubuntu-latest
+    needs: deploy-core
+    
+    strategy:
+      matrix:
+        service:
+          - product-service
+          - user-service
+          - payment-service
+          - order-service
+          - shipping-service
+          - favourite-service
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+      
+      - name: Deploy ${{ matrix.service }}
+        run: |
+          echo "Deploying ${{ matrix.service }}..."
+          helm upgrade --install ${{ matrix.service }} ./helm-charts/business/${{ matrix.service }} \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=build-${{ github.run_number }} \
+            --wait --timeout 5m
+          
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=${{ matrix.service }} \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          
+          echo "${{ matrix.service }} deployed"
+
+  # ============================================
+  # JOB 5: Deploy API Gateway 
+  # ============================================
+  deploy-gateway:
+    name: Deploy API Gateway
+    runs-on: ubuntu-latest
+    needs: deploy-business
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+      
+      - name: Deploy API Gateway
+        run: |
+          echo "Deploying API Gateway..."
+          helm upgrade --install api-gateway ./helm-charts/core/api-gateway \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=build-${{ github.run_number }} \
+            --wait --timeout 5m
+          
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=api-gateway \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          
+          echo "API Gateway deployed"
+
+  # ============================================
+  # JOB 6: Health Checks & Smoke Tests
+  # ============================================
+  health-checks:
+    name: Health Checks & Validation
+    runs-on: ubuntu-latest
+    needs: deploy-gateway
+    
+    steps:
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+      
+      - name: Run health checks
+        run: |
+          echo "Running health checks..."
+          
+          SERVICES="product-service user-service payment-service order-service shipping-service favourite-service api-gateway cloud-config service-discovery"
+          
+          for service in $SERVICES; do
+            echo "Checking $service..."
+            
+            POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
+              -l app.kubernetes.io/name=$service \
+              -o jsonpath='{.items[0].metadata.name}')
+            
+            if [ -z "$POD" ]; then
+              echo "No pod found for $service"
+              exit 1
+            fi
+            
+            kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              curl -f http://localhost:8080/actuator/health || {
+                echo "Health check failed for $service"
+                exit 1
+              }
+            
+            echo "$service is healthy"
+          done
+          
+          echo "All health checks passed"
+      
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Health checks failed - initiating rollback..."
+          
+          SERVICES="api-gateway product-service user-service payment-service order-service shipping-service favourite-service service-discovery cloud-config"
+          
+          for service in $SERVICES; do
+            echo "Rolling back $service..."
+            helm rollback $service -n ${{ env.KUBE_NAMESPACE }} || true
+          done
+          
+          echo "Rollback completed"
