@@ -177,62 +177,62 @@ jobs:
   # JOB 3: Deploy Core Services (orden correcto)
   # ============================================
   deploy-core:
-  name: Deploy Core Services
-  runs-on: ubuntu-latest
-  needs: create-kind-cluster
-  if: github.ref == 'refs/heads/master'
+    name: Deploy Core Services
+    runs-on: ubuntu-latest
+    needs: create-kind-cluster
+    if: github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Download kubeconfig
+        uses: actions/download-artifact@v4
+        with:
+          name: kubeconfig
+          path: kind
 
-    - name: Download kubeconfig
-      uses: actions/download-artifact@v4
-      with:
-        name: kubeconfig
-        path: kind
+      - name: Set KUBECONFIG environment variable
+        run: echo "KUBECONFIG=$(pwd)/kind/kubeconfig.yaml" >> $GITHUB_ENV
 
-    - name: Set KUBECONFIG environment variable
-      run: echo "KUBECONFIG=$(pwd)/kind/kubeconfig.yaml" >> $GITHUB_ENV
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
 
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
 
-    - name: Install Helm
-      uses: azure/setup-helm@v3
-      with:
-        version: '3.13.0'
+      - name: Deploy Cloud Config
+        run: |
+          echo "Deploying Cloud Config..."
+          TAG=build-${{ github.run_number }}
 
-    - name: Deploy Cloud Config
-      run: |
-        echo "Deploying Cloud Config..."
-        TAG=build-${{ github.run_number }}
+          helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
+            --namespace ${{ env.KUBE_NAMESPACE }} --create-namespace \
+            --set image.tag=$TAG --wait --timeout 5m
 
-        helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
-          --namespace ${{ env.KUBE_NAMESPACE }} --create-namespace \
-          --set image.tag=$TAG --wait --timeout 5m
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=cloud-config \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
-        kubectl wait --for=condition=ready pod \
-          -l app.kubernetes.io/name=cloud-config \
-          -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+      - name: Deploy Service Discovery
+        run: |
+          TAG=build-${{ github.run_number }}
+          echo "Deploying Service Discovery..."
 
-    - name: Deploy Service Discovery
-      run: |
-        TAG=build-${{ github.run_number }}
-        echo "Deploying Service Discovery..."
+          helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.tag=$TAG \
+            --wait --timeout 5m
+            
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=service-discovery \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
-        helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
-          --namespace ${{ env.KUBE_NAMESPACE }} \
-          --set image.tag=$TAG \
-          --wait --timeout 5m
-          
-        kubectl wait --for=condition=ready pod \
-          -l app.kubernetes.io/name=service-discovery \
-          -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-
-        echo "Core services deployed successfully"
+          echo "Core services deployed successfully"
 
   # ============================================
   # JOB 4: Deploy Business Services (paralelo)
