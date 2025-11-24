@@ -161,7 +161,7 @@ jobs:
         uses: helm/kind-action@v1
         with:
           cluster_name: ecommerce
-          wait: 120
+          wait: 2m
   # ============================================
   # JOB 3: Deploy Core Services (orden correcto)
   # ============================================
@@ -331,4 +331,5 @@ jobs:
           echo "Rolling back services..."
           for svc in api-gateway product-service user-service payment-service order-service shipping-service favourite-service service-discovery cloud-config; do
             helm rollback $svc -n dev || true
+
           done
