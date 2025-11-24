@@ -107,7 +107,7 @@ jobs:
           echo "Contenido de ${{ matrix.service }}/target:"
           ls -lh ${{ matrix.service }}/target/
           echo ""
-          echo "🔍 Archivos JAR encontrados:"
+          echo "Archivos JAR encontrados:"
           find ${{ matrix.service }}/target/ -name "*.jar"
         #For debugging purposes only, can be removed later
       - name: Verify JAR exists
