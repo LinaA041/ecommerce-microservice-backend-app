@@ -101,7 +101,25 @@ jobs:
         with:
           name: ${{ matrix.service }}-jar
           path: ${{ matrix.service }}/target
-      
+
+      - name: Debug - List downloaded files
+        run: |
+          echo "Contenido de ${{ matrix.service }}/target:"
+          ls -lh ${{ matrix.service }}/target/
+          echo ""
+          echo "🔍 Archivos JAR encontrados:"
+          find ${{ matrix.service }}/target/ -name "*.jar"
+        #For debugging purposes only, can be removed later
+      - name: Verify JAR exists
+        run: |
+          if [ ! -f ${{ matrix.service }}/target/*.jar ]; then
+            echo "ERROR: No se encontró ningún JAR en ${{ matrix.service }}/target/"
+            echo "Contenido del directorio:"
+            ls -la ${{ matrix.service }}/target/
+            exit 1
+          fi
+          echo "JAR encontrado"
+            
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
