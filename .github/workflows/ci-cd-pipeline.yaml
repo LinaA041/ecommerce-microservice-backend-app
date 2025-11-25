@@ -336,6 +336,10 @@ jobs:
             echo "Secret actuator-credentials already exists, skipping creation"
           fi
       
+      - name: Apply ecommerce TLS Sealed Secret
+        run: |
+          kubectl apply -f infrastructure/secrets/ecommerce-tls-sealed.yaml -n dev
+      
       # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
       - name: Deploy Business Services
         run: |
@@ -375,7 +379,7 @@ jobs:
           echo "Deploying API Gateway..."
           TAG=build-${{ github.run_number }}
 
-          helm upgrade --install api-gateway ./helm-charts/core/api-gateway \
+          helm upgrade --install api-gateway ./helm-charts/services/api-gateway \
             --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.repository=${{ env.DOCKER_USERNAME }}/api-gateway \
             --set image.tag=$TAG \
