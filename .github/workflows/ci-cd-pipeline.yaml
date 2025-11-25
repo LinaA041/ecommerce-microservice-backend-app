@@ -406,21 +406,46 @@ jobs:
           kubectl get svc -n ${{ env.KUBE_NAMESPACE }}
           echo "================================================"
       
-      - name: Health Checks
+      - name: Health Checks with Eureka Dependency
         run: |
           echo "================================================"
-          echo " HEALTH CHECKS"
+          echo " HEALTH CHECKS WITH EUREKA DEPENDENCY"
           echo "================================================"
           echo ""
-          
+
           echo " Waiting for services to fully initialize..."
-          echo "   (Services need time to complete Spring Boot startup)"
+          echo "   (Services need time to start Spring Boot and register in Eureka)"
           echo ""
-          sleep 1m
-          
-          echo "Starting health checks..."
+          sleep 2m
+
+          EUREKA_URL="http://service-discovery:8761/eureka/apps"
+          MAX_EUREKA_RETRIES=10
+          EUREKA_RETRY_DELAY=10
+
+          # Esperar a que Eureka esté disponible
+          EUREKA_OK=false
+          for i in $(seq 1 $MAX_EUREKA_RETRIES); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $EUREKA_URL)
+            if [ "$HTTP_CODE" = "200" ]; then
+              EUREKA_OK=true
+              echo "Eureka is UP (HTTP $HTTP_CODE)"
+              break
+            else
+              echo "Waiting for Eureka (HTTP $HTTP_CODE), retry $i/$MAX_EUREKA_RETRIES..."
+              sleep $EUREKA_RETRY_DELAY
+            fi
+          done
+
+          if [ "$EUREKA_OK" = false ]; then
+            echo "Eureka not ready after $MAX_EUREKA_RETRIES attempts"
+            exit 1
+          fi
+
           echo ""
-    
+          echo "Starting service health checks..."
+          echo ""
+
+          # Servicios con puertos y context-path
           declare -A SERVICE_PORTS=(
             ["cloud-config"]="9296"
             ["service-discovery"]="8761"
@@ -432,36 +457,64 @@ jobs:
             ["favourite-service"]="8800"
             ["api-gateway"]="8080"
           )
-          
+
+          declare -A SERVICE_CONTEXT=(
+            ["cloud-config"]="/"
+            ["service-discovery"]="/"
+            ["product-service"]="/product-service"
+            ["user-service"]="/user-service"
+            ["payment-service"]="/payment-service"
+            ["order-service"]="/order-service"
+            ["shipping-service"]="/shipping-service"
+            ["favourite-service"]="/favourite-service"
+            ["api-gateway"]="/"
+          )
+
           FAILED=0
           MAX_RETRIES=5
-          RETRY_DELAY=10
-    
+          RETRY_DELAY=15
+
           for service in "${!SERVICE_PORTS[@]}"; do
             PORT=${SERVICE_PORTS[$service]}
-            
+            CONTEXT=${SERVICE_CONTEXT[$service]}
+
             echo "─────────────────────────────────────────────"
-            echo "Service: $service (port $PORT)"
+            echo "Service: $service (port $PORT, context $CONTEXT)"
             echo "─────────────────────────────────────────────"
-            
+
             POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
               -l app.kubernetes.io/name=$service \
               -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-            
+
             if [ -z "$POD" ]; then
               echo "No pod found"
               FAILED=1
               echo ""
               continue
             fi
-            
+
+            # Esperar a que el servicio aparezca en Eureka
+            EUREKA_PRESENT=false
+            for i in $(seq 1 $MAX_RETRIES); do
+              curl -s $EUREKA_URL/$service > /dev/null && EUREKA_PRESENT=true && break
+              echo "Service $service not yet in Eureka, retry $i/$MAX_RETRIES..."
+              sleep $RETRY_DELAY
+            done
+
+            if [ "$EUREKA_PRESENT" = false ]; then
+              echo "$service never registered in Eureka"
+              FAILED=1
+              continue
+            fi
+
+            # Health check real del endpoint /actuator/health
             RETRY=0
             SUCCESS=false
-            
+
             while [ $RETRY -lt $MAX_RETRIES ]; do
               HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              sh -c "wget --spider --server-response http://localhost:$PORT/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
-              
+                sh -c "wget --spider --server-response http://localhost:$PORT$CONTEXT/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
+
               if [ "$HTTP_CODE" = "200" ]; then
                 echo "Healthy (HTTP $HTTP_CODE, attempt $((RETRY + 1)))"
                 SUCCESS=true
@@ -469,12 +522,11 @@ jobs:
               else
                 RETRY=$((RETRY + 1))
                 if [ $RETRY -lt $MAX_RETRIES ]; then
-                  echo "⏳ Not ready yet (HTTP $HTTP_CODE), retry $RETRY/$MAX_RETRIES (waiting ${RETRY_DELAY}s)..."
+                  echo " Not ready yet (HTTP $HTTP_CODE), retry $RETRY/$MAX_RETRIES (waiting ${RETRY_DELAY}s)..."
                   sleep $RETRY_DELAY
                 fi
               fi
-            
-            done 
+            done
 
             if [ "$SUCCESS" = false ]; then
               echo "Failed after $MAX_RETRIES attempts"
@@ -483,10 +535,10 @@ jobs:
               kubectl logs -n ${{ env.KUBE_NAMESPACE }} $POD --tail=20 2>/dev/null || echo "Could not fetch logs"
               FAILED=1
             fi
-            
+
             echo ""
           done
-          
+
           echo "================================================"
           if [ $FAILED -eq 1 ]; then
             echo "HEALTH CHECKS FAILED"
@@ -496,6 +548,7 @@ jobs:
             echo "ALL HEALTH CHECKS PASSED"
             echo "================================================"
           fi
+
       
       - name: Rollback on failure
         if: failure()
