@@ -459,20 +459,23 @@ jobs:
             SUCCESS=false
             
             while [ $RETRY -lt $MAX_RETRIES ]; do
-              if kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-                sh -c "wget -q -O- --timeout=5 http://localhost:$PORT/actuator/health 2>/dev/null" | grep -q '"status":"UP"'; then
-                echo "Healthy (attempt $((RETRY + 1)))"
+              HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              sh -c "wget --spider --server-response http://localhost:$PORT/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
+              
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Healthy (HTTP $HTTP_CODE, attempt $((RETRY + 1)))"
                 SUCCESS=true
                 break
               else
                 RETRY=$((RETRY + 1))
                 if [ $RETRY -lt $MAX_RETRIES ]; then
-                  echo "Not ready yet, retry $RETRY/$MAX_RETRIES (waiting ${RETRY_DELAY}s)..."
+                  echo "⏳ Not ready yet (HTTP $HTTP_CODE), retry $RETRY/$MAX_RETRIES (waiting ${RETRY_DELAY}s)..."
                   sleep $RETRY_DELAY
                 fi
               fi
-            done
             
+            done 
+
             if [ "$SUCCESS" = false ]; then
               echo "Failed after $MAX_RETRIES attempts"
               echo ""
