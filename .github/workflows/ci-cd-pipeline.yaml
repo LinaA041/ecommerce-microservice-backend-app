@@ -1,6 +1,12 @@
 name: CI/CD Pipeline - Microservicios E-commerce
 
 on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 env:
@@ -179,7 +185,7 @@ jobs:
           docker pull ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG
           docker pull ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG
           
-          echo " All images pulled"
+          echo "All images pulled"
       
       - name: Load images into KIND
         run: |
