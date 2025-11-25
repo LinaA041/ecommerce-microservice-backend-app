@@ -4,9 +4,9 @@ on:
   push:
     branches: [ master, develop ]
     paths:
-      - '*-service/**'
-      - 'helm-charts/**'
-      - '.github/workflows/**'
+      - 'cloud-config/**'
+      - 'helm-charts/core/cloud-config/**'
+      - '.github/workflows/ci-cd-pipeline.yaml'
   pull_request:
     branches: [ master ]
   workflow_dispatch:  # Permite ejecución manual
@@ -237,15 +237,31 @@ jobs:
           # Crear ServiceAccount
           kubectl create serviceaccount microservice-sa -n ${{ env.KUBE_NAMESPACE }} || echo "ServiceAccount already exists"
           
-          # Aplicar Role desde tu archivo
+          # Aplicar Role 
           kubectl apply -f infrastructure/rbac/role.yaml -n ${{ env.KUBE_NAMESPACE }}
           
-          # Aplicar RoleBinding desde tu archivo
+          # Aplicar RoleBinding
           kubectl apply -f infrastructure/rbac/rolebinding.yaml -n ${{ env.KUBE_NAMESPACE }}
           
           echo "ServiceAccount and RBAC configured"
 
+      - name: Create ConfigMaps
+        run: |
+          echo "Creating ConfigMaps..."
           
+          # ConfigMap para cloud-config 
+          kubectl create configmap cloud-config-env \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --from-literal=SPRING_PROFILES_ACTIVE=default \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+
+          # ConfigMap de aplicación (application.yml)
+          kubectl create configmap cloud-config-application \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --from-file=application.yml=cloud-config/src/main/resources/application.yml \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
       - name: Deploy Cloud Config
         run: |
           echo "Deploying Cloud Config..."
