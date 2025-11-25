@@ -303,6 +303,18 @@ jobs:
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
           
           echo " Cloud Config deployed"
+
+          helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --set image.repository=${{ env.DOCKER_USERNAME }}/service-discovery \
+            --set image.tag=$TAG \
+            --wait --timeout 5m
+
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=service-discovery \
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+
+          echo " Service Discovery deployed"
       
       # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
       - name: Deploy Business Services
