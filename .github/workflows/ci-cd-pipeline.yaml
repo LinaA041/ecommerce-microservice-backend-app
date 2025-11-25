@@ -444,7 +444,7 @@ jobs:
             ["order-service"]="/order-service"
             ["shipping-service"]="/shipping-service"
             ["favourite-service"]="/favourite-service"
-            ["api-gateway"]="/api-gateway"
+            ["api-gateway"]=""
           )
 
           FAILED=0
