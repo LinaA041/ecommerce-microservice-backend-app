@@ -316,6 +316,26 @@ jobs:
 
           echo " Service Discovery deployed"
       
+      - name: Ensure actuator-credentials Secret exists
+        run: |
+          NAMESPACE=${{ env.KUBE_NAMESPACE }}
+
+          # Generar nueva contraseña aleatoria si el Secret no existe
+          if ! kubectl get secret actuator-credentials -n $NAMESPACE &>/dev/null; then
+            echo "Secret actuator-credentials not found, creating..."
+            NEW_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+            
+            kubectl create secret generic actuator-credentials \
+              --from-literal=username=admin \
+              --from-literal=password=$NEW_PASS \
+              --namespace=$NAMESPACE \
+              --dry-run=client -o yaml | kubectl apply -f -
+              
+            echo "Secret 'actuator-credentials' created"
+          else
+            echo "Secret actuator-credentials already exists, skipping creation"
+          fi
+      
       # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
       - name: Deploy Business Services
         run: |
