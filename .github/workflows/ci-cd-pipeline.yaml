@@ -418,29 +418,6 @@ jobs:
           echo ""
           sleep 2m
 
-          EUREKA_URL="http://service-discovery:8761/eureka/apps"
-          MAX_EUREKA_RETRIES=10
-          EUREKA_RETRY_DELAY=10
-
-          # Esperar a que Eureka esté disponible
-          EUREKA_OK=false
-          for i in $(seq 1 $MAX_EUREKA_RETRIES); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $EUREKA_URL)
-            if [ "$HTTP_CODE" = "200" ]; then
-              EUREKA_OK=true
-              echo "Eureka is UP (HTTP $HTTP_CODE)"
-              break
-            else
-              echo "Waiting for Eureka (HTTP $HTTP_CODE), retry $i/$MAX_EUREKA_RETRIES..."
-              sleep $EUREKA_RETRY_DELAY
-            fi
-          done
-
-          if [ "$EUREKA_OK" = false ]; then
-            echo "Eureka not ready after $MAX_EUREKA_RETRIES attempts"
-            exit 1
-          fi
-
           echo ""
           echo "Starting service health checks..."
           echo ""
