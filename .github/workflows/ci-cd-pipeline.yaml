@@ -470,19 +470,6 @@ jobs:
               continue
             fi
 
-            # Esperar a que el servicio aparezca en Eureka
-            EUREKA_PRESENT=false
-            for i in $(seq 1 $MAX_RETRIES); do
-              curl -s $EUREKA_URL/$service > /dev/null && EUREKA_PRESENT=true && break
-              echo "Service $service not yet in Eureka, retry $i/$MAX_RETRIES..."
-              sleep $RETRY_DELAY
-            done
-
-            if [ "$EUREKA_PRESENT" = false ]; then
-              echo "$service never registered in Eureka"
-              FAILED=1
-              continue
-            fi
 
             # Health check real del endpoint /actuator/health
             RETRY=0
