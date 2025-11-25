@@ -240,31 +240,35 @@ jobs:
             --set image.repository=${{ env.DOCKER_USERNAME }}/cloud-config \
             --set image.tag=$TAG \
             --set image.pullPolicy=IfNotPresent \
-            --wait --timeout 5m
+            --wait --timeout 5m || {
+              echo "Helm install failed!" }
+        
+      
+              kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
+              
+          
+              kubectl get events -n ${{ env.KUBE_NAMESPACE }} --sort-by='.lastTimestamp' | tail -20
+              
+              # Si hay un pod, ver sus logs
+              POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} -l app.kubernetes.io/name=cloud-config -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+              if [ -n "$POD" ]; then
+                echo ""
+                echo "Pod logs:"
+                kubectl logs $POD -n ${{ env.KUBE_NAMESPACE }} --tail=100 || true
+                
+                echo ""
+                echo "Pod description:"
+                kubectl describe pod $POD -n ${{ env.KUBE_NAMESPACE }}
+              fi
+              
+              exit 1
+            }
 
           kubectl wait --for=condition=ready pod \
             -l app.kubernetes.io/name=cloud-config \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
           
-          echo "Cloud Config deployed"
-
-      - name: Deploy Service Discovery
-        run: |
-          echo "Deploying Service Discovery..."
-          TAG=build-${{ github.run_number }}
-
-          helm upgrade --install service-discovery ./helm-charts/core/service-discovery \
-            --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.repository=${{ env.DOCKER_USERNAME }}/service-discovery \
-            --set image.tag=$TAG \
-            --set image.pullPolicy=IfNotPresent \
-            --wait --timeout 5m
-
-          kubectl wait --for=condition=ready pod \
-            -l app.kubernetes.io/name=service-discovery \
-            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-          
-          echo "Service Discovery deployed"
+          echo " Cloud Config deployed"
       
       # DEPLOY DE BUSINESS SERVICES EN EL MISMO JOB
       - name: Deploy Business Services
