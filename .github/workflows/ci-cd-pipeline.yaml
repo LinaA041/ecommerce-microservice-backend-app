@@ -427,9 +427,9 @@ jobs:
             ["product-service"]="8500"
             ["user-service"]="8700"
             ["payment-service"]="8400"
-            ["order-service"]="8600"
-            ["shipping-service"]="8800"
-            ["favourite-service"]="8300"
+            ["order-service"]="8300"
+            ["shipping-service"]="8600"
+            ["favourite-service"]="8800"
             ["api-gateway"]="8080"
           )
           
