@@ -164,7 +164,7 @@ jobs:
       # CARGAR TODAS LAS IMÁGENES EN KIND
       - name: Pull images from Docker Hub
         run: |
-          echo "🔄 Pulling images from Docker Hub..."
+          echo " Pulling images from Docker Hub..."
           TAG=build-${{ github.run_number }}
           
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
@@ -179,11 +179,11 @@ jobs:
           docker pull ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG
           docker pull ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG
           
-          echo "✅ All images pulled"
+          echo " All images pulled"
       
       - name: Load images into KIND
         run: |
-          echo "📦 Loading images into KIND cluster..."
+          echo " Loading images into KIND cluster..."
           TAG=build-${{ github.run_number }}
           
           kind load docker-image ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG --name ecommerce
@@ -342,27 +342,38 @@ jobs:
           
           echo "Testing pod: $POD"
           
-          # Test 1: Health endpoint
-          echo "Test 1: Health check..."
-          HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:9296/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1")
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Health check failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
-          echo "Health check passed"
-          
-          # Test 2: Config endpoint accessible
-          echo "Test 2: Config server endpoints..."
-          HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:9296/actuator/info 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1")
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Config endpoints not accessible (HTTP $HTTP_CODE)"
-            exit 1
-          fi
-          echo " Config endpoints accessible"
+            retry() {
+              local n=1
+              local max=10
+              local delay=10
+
+              while true; do
+                "$@" && break || {
+                  if [[ $n -lt $max ]]; then
+                    echo "Attempt $n/$max failed. Retrying in $delay seconds..."
+                    sleep $delay
+                    ((n++))
+                  else
+                    echo "Final attempt failed. Aborting."
+                    return 1
+                  fi
+                }
+              done
+            }
+
+            echo "Running health check with retries..."
+
+            retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              wget --spider -q http://localhost:9296/actuator/health
+
+            echo "Cloud Config health OK"
+
+            echo "Checking /actuator/info ..."
+            retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              wget --spider -q http://localhost:9296/actuator/info
+
+            echo "Config endpoints OK"
+            echo "GATE PASSED: Cloud Config is healthy"
           
           echo ""
           echo "GATE PASSED: Cloud Config is healthy"
@@ -401,8 +412,8 @@ jobs:
           echo "Testing Eureka on pod: $POD"
           
           # Esperar un poco para que Eureka esté completamente listo
-          echo "Waiting 30s for Eureka to stabilize..."
-          sleep 30
+          echo "Waiting 60s for Eureka to stabilize..."
+          sleep 60
           
           # Test: Eureka UI accesible
           echo "Test: Eureka dashboard access..."
@@ -569,7 +580,7 @@ jobs:
           echo "DEPLOYMENT GATE: API Gateway E2E Test"
           echo "================================================"
           
-          echo "⏳ Waiting 1 minute for API Gateway to fully initialize..."
+          echo "Waiting 1 minute for API Gateway to fully initialize..."
           sleep 60
           
           POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
