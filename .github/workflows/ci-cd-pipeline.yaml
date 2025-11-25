@@ -339,7 +339,7 @@ jobs:
       - name: Install SealedSecrets controller
         run: |
           kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/latest/download/controller.yaml
-          
+
       - name: Apply ecommerce TLS Sealed Secret
         run: |
           kubectl apply -f infrastructure/secrets/ecommerce-tls-sealed.yaml -n dev
@@ -408,8 +408,19 @@ jobs:
       
       - name: Health Checks
         run: |
-          echo "Running health checks..."
+          echo "================================================"
+          echo " HEALTH CHECKS"
+          echo "================================================"
+          echo ""
           
+          echo " Waiting for services to fully initialize..."
+          echo "   (Services need time to complete Spring Boot startup)"
+          echo ""
+          sleep 1m
+          
+          echo "Starting health checks..."
+          echo ""
+    
           declare -A SERVICE_PORTS=(
             ["cloud-config"]="9296"
             ["service-discovery"]="8761"
@@ -423,38 +434,65 @@ jobs:
           )
           
           FAILED=0
-          
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+    
           for service in "${!SERVICE_PORTS[@]}"; do
             PORT=${SERVICE_PORTS[$service]}
             
-            echo "  → Checking $service (port $PORT)..."
+            echo "─────────────────────────────────────────────"
+            echo "Service: $service (port $PORT)"
+            echo "─────────────────────────────────────────────"
             
             POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} \
               -l app.kubernetes.io/name=$service \
               -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
             
             if [ -z "$POD" ]; then
-              echo " No pod found for $service"
+              echo "No pod found"
               FAILED=1
+              echo ""
               continue
             fi
             
-            if kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              sh -c "wget -q -O- http://localhost:$PORT/actuator/health 2>/dev/null" | grep -q '"status":"UP"'; then
-              echo "  $service is healthy"
-            else
-              echo "   $service health check failed"
-              kubectl logs -n ${{ env.KUBE_NAMESPACE }} $POD --tail=30
+            RETRY=0
+            SUCCESS=false
+            
+            while [ $RETRY -lt $MAX_RETRIES ]; do
+              if kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+                sh -c "wget -q -O- --timeout=5 http://localhost:$PORT/actuator/health 2>/dev/null" | grep -q '"status":"UP"'; then
+                echo "Healthy (attempt $((RETRY + 1)))"
+                SUCCESS=true
+                break
+              else
+                RETRY=$((RETRY + 1))
+                if [ $RETRY -lt $MAX_RETRIES ]; then
+                  echo "Not ready yet, retry $RETRY/$MAX_RETRIES (waiting ${RETRY_DELAY}s)..."
+                  sleep $RETRY_DELAY
+                fi
+              fi
+            done
+            
+            if [ "$SUCCESS" = false ]; then
+              echo "Failed after $MAX_RETRIES attempts"
+              echo ""
+              echo "Last 20 log lines:"
+              kubectl logs -n ${{ env.KUBE_NAMESPACE }} $POD --tail=20 2>/dev/null || echo "Could not fetch logs"
               FAILED=1
             fi
+            
+            echo ""
           done
           
+          echo "================================================"
           if [ $FAILED -eq 1 ]; then
-            echo "Some health checks failed"
+            echo "HEALTH CHECKS FAILED"
+            echo "================================================"
             exit 1
+          else
+            echo "ALL HEALTH CHECKS PASSED"
+            echo "================================================"
           fi
-          
-          echo "All health checks passed"
       
       - name: Rollback on failure
         if: failure()
