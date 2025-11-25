@@ -252,7 +252,7 @@ jobs:
           # ConfigMap para cloud-config 
           kubectl create configmap cloud-config-env \
             -n ${{ env.KUBE_NAMESPACE }} \
-            --from-literal=SPRING_PROFILES_ACTIVE=default \
+            --from-literal=SPRING_PROFILES_ACTIVE=dev \
             --dry-run=client -o yaml | kubectl apply -f -
           
 
@@ -261,7 +261,9 @@ jobs:
             -n ${{ env.KUBE_NAMESPACE }} \
             --from-file=application.yml=cloud-config/src/main/resources/application.yml \
             --dry-run=client -o yaml | kubectl apply -f -
-            
+
+          kubectl apply -f infrastructure/common-configmap-template.yaml -n ${{ env.KUBE_NAMESPACE }}
+
       - name: Deploy Cloud Config
         run: |
           echo "Deploying Cloud Config..."
@@ -320,7 +322,7 @@ jobs:
           for service in "${SERVICES[@]}"; do
             echo "  → Deploying $service..."
             
-            helm upgrade --install $service ./helm-charts/business/$service \
+            helm upgrade --install $service ./helm-charts/services/$service \
               --namespace ${{ env.KUBE_NAMESPACE }} \
               --set image.repository=${{ env.DOCKER_USERNAME }}/$service \
               --set image.tag=$TAG \
