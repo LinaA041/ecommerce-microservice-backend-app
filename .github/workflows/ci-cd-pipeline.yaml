@@ -229,7 +229,23 @@ jobs:
             --from-literal=username="${{ secrets.CONFIG_REPO_USERNAME }}" \
             --from-literal=password="${{ secrets.CONFIG_REPO_PASSWORD }}" \
             --dry-run=client -o yaml | kubectl apply -f -
+      
+      - name: Create ServiceAccount and RBAC
+        run: |
+          echo "Creating ServiceAccount and RBAC..."
+          
+          # Crear ServiceAccount
+          kubectl create serviceaccount microservice-sa -n ${{ env.KUBE_NAMESPACE }} || echo "ServiceAccount already exists"
+          
+          # Aplicar Role desde tu archivo
+          kubectl apply -f infrastructure/rbac/role.yaml -n ${{ env.KUBE_NAMESPACE }}
+          
+          # Aplicar RoleBinding desde tu archivo
+          kubectl apply -f infrastructure/rbac/rolebinding.yaml -n ${{ env.KUBE_NAMESPACE }}
+          
+          echo "ServiceAccount and RBAC configured"
 
+          
       - name: Deploy Cloud Config
         run: |
           echo "Deploying Cloud Config..."
