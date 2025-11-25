@@ -379,7 +379,7 @@ jobs:
               wget --spider -q http://localhost:9296/actuator/info
 
             echo "Config endpoints OK"
-            echo "GATE PASSED: Cloud Config is healthy"
+
           
           echo ""
           echo "GATE PASSED: Cloud Config is healthy"
@@ -595,44 +595,63 @@ jobs:
           
           echo "Testing API Gateway on pod: $POD"
           
+          retry() {
+            local n=1
+            local max=12      # 12 attempts → 2 minutes
+            local delay=10
+
+            while true; do
+              "$@" && break || {
+                if [[ $n -lt $max ]]; then
+                  echo "Attempt $n/$max failed. Retrying in $delay seconds..."
+                  sleep $delay
+                  ((n++))
+                else
+                  echo "Final attempt failed. Aborting."
+                  return 1
+                fi
+              }
+            done
+          }
+
+          # --------------------------------------
           # Test 1: Gateway health
+          # --------------------------------------
           echo ""
           echo "Test 1: Gateway health check..."
-          HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1")
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "API Gateway health check failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+
+          retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+            sh -c "wget --spider --server-response http://localhost:8080/actuator/health 2>&1 \
+            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
+
           echo "Gateway health check passed"
-          
-          # Test 2: Routes accessible
+
+
+          # --------------------------------------
+          # Test 2: Product-service route
+          # --------------------------------------
           echo ""
           echo "Test 2: Testing service routes through gateway..."
-          
-          # Test product-service route
-          echo "  → Testing /product-service/actuator/health..."
-          HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/product-service/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Product service route failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+          echo "  Testing /product-service/actuator/health..."
+
+          retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+            sh -c "wget --spider --server-response http://localhost:8080/product-service/actuator/health 2>&1 \
+            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
+
           echo "Product service route working"
-          
-          # Test user-service route
-          echo "  → Testing /user-service/actuator/health..."
-          HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/user-service/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "User service route failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+
+
+          # --------------------------------------
+          # Test 3: User-service route
+          # --------------------------------------
+          echo "  Testing /user-service/actuator/health..."
+
+          retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+            sh -c "wget --spider --server-response http://localhost:8080/user-service/actuator/health 2>&1 \
+            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
+
           echo "User service route working"
-          
+
           echo ""
           echo "GATE PASSED: API Gateway is fully functional"
           echo "================================================"
