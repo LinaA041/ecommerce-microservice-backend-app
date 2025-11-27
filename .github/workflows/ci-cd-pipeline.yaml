@@ -504,7 +504,6 @@ jobs:
             "order-service:8300:/order-service"
             "shipping-service:8600:/shipping-service"
             "favourite-service:8800:/favourite-service"
-            "proxy-client:8900:/proxy-client" #This is only to check if the proxy-client is up (testing)
           )
           
           FAILED=0
@@ -794,6 +793,7 @@ jobs:
             "order-service"
             "shipping-service"
             "favourite-service"
+            "proxy-client"
           )
           
           for service in "${BUSINESS_SERVICES[@]}"; do
