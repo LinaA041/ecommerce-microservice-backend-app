@@ -32,6 +32,7 @@ jobs:
           - { name: order-service, path: order-service }
           - { name: shipping-service, path: shipping-service }
           - { name: favourite-service, path: favourite-service }
+          - { name: proxy-client, path: proxy-client }
           - { name: api-gateway, path: api-gateway }
           - { name: cloud-config, path: cloud-config }
           - { name: service-discovery, path: service-discovery }
@@ -89,6 +90,7 @@ jobs:
           - api-gateway
           - cloud-config
           - service-discovery
+          - proxy-client
     
     steps:
       - name: Checkout code
@@ -207,6 +209,7 @@ jobs:
             "shipping-service"
             "favourite-service"
             "api-gateway"
+            "proxy-client"
           )
           
           for service in "${SERVICES[@]}"; do
@@ -349,7 +352,7 @@ jobs:
           export RETRY_MAX=10
           export RETRY_DELAY=10
           
-          echo "🏥 Running health check with retries..."
+          echo "Running health check with retries..."
           retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
             wget --spider -q http://localhost:9296/actuator/health
           
@@ -456,6 +459,7 @@ jobs:
             "order-service"
             "shipping-service"
             "favourite-service"
+            "proxy-client"
           )
           
           for service in "${SERVICES[@]}"; do
@@ -500,6 +504,7 @@ jobs:
             "order-service:8300:/order-service"
             "shipping-service:8600:/shipping-service"
             "favourite-service:8800:/favourite-service"
+            "proxy-client:8900:/proxy-client" #This is only to check if the proxy-client is up (testing)
           )
           
           FAILED=0
