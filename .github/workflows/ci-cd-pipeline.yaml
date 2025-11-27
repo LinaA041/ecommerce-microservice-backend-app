@@ -50,7 +50,7 @@ jobs:
       - name: Build with Maven
         working-directory: ${{ matrix.service.path }}
         run: |
-          echo "Building ${{ matrix.service.name }}..."
+          echo "🔨 Building ${{ matrix.service.name }}..."
           mvn clean package -DskipTests
           echo "Build completed"
       
@@ -99,24 +99,15 @@ jobs:
         with:
           name: ${{ matrix.service }}-jar
           path: ${{ matrix.service }}/target
-
-      - name: Debug - List downloaded files
-        run: |
-          echo "Contenido de ${{ matrix.service }}/target:"
-          ls -lh ${{ matrix.service }}/target/
-          echo ""
-          echo "Archivos JAR encontrados:"
-          find ${{ matrix.service }}/target/ -name "*.jar"
       
       - name: Verify JAR exists
         run: |
           if [ ! -f ${{ matrix.service }}/target/*.jar ]; then
-            echo "ERROR: No se encontró ningún JAR en ${{ matrix.service }}/target/"
-            echo "Contenido del directorio:"
+            echo "ERROR: No JAR found in ${{ matrix.service }}/target/"
             ls -la ${{ matrix.service }}/target/
             exit 1
           fi
-          echo "JAR encontrado"
+          echo "JAR found"
             
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -146,6 +137,9 @@ jobs:
           cache-from: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ matrix.service }}:buildcache,mode=max
 
+  # ============================================
+  # JOB 3: Deploy to Kubernetes
+  # ============================================
   deploy-core:
     name: Deploy core services (KIND)
     runs-on: ubuntu-latest
@@ -155,6 +149,32 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ==========================================
+      # DESCARGAR BACKUP DE LA EJECUCIÓN ANTERIOR
+      # ==========================================
+      - name: Download previous successful deployment backup
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: ci-cd-pipeline.yaml
+          name: deployment-backup
+          path: previous-deployment
+          if_no_artifact_found: ignore
+          search_artifacts: true
+      
+      - name: Check if previous backup exists
+        id: check_backup
+        run: |
+          if [ -f previous-deployment/deployment-info.txt ]; then
+            echo "Found backup from previous successful deployment"
+            echo "PREVIOUS_BACKUP_EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Previous deployment info:"
+            cat previous-deployment/deployment-info.txt
+          else
+            echo "No previous backup found (first deployment or artifact expired)"
+            echo "PREVIOUS_BACKUP_EXISTS=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create KIND cluster
         uses: helm/kind-action@v1
@@ -167,40 +187,37 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
       
-      # CARGAR TODAS LAS IMÁGENES EN KIND
-      - name: Pull images from Docker Hub
+      # ==========================================
+      # CARGAR IMÁGENES EN KIND 
+      # ==========================================
+      - name: Pull and load images into KIND
         run: |
-          echo " Pulling images from Docker Hub..."
+          echo "Pulling and loading images into KIND..."
           TAG=build-${{ github.run_number }}
           
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
           
-          docker pull ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/product-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/user-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/payment-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/order-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG
-          docker pull ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG
+          SERVICES=(
+            "cloud-config"
+            "service-discovery"
+            "product-service"
+            "user-service"
+            "payment-service"
+            "order-service"
+            "shipping-service"
+            "favourite-service"
+            "api-gateway"
+          )
           
-          echo "All images pulled"
-      
-      - name: Load images into KIND
-        run: |
-          echo " Loading images into KIND cluster..."
-          TAG=build-${{ github.run_number }}
-          
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/cloud-config:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/service-discovery:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/product-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/user-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/payment-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/order-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/shipping-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/favourite-service:$TAG --name ecommerce
-          kind load docker-image ${{ env.DOCKER_USERNAME }}/api-gateway:$TAG --name ecommerce
+          for service in "${SERVICES[@]}"; do
+            echo "  → Pulling $service:$TAG..."
+            docker pull ${{ env.DOCKER_USERNAME }}/$service:$TAG
+            
+            echo "  → Loading into KIND..."
+            kind load docker-image ${{ env.DOCKER_USERNAME }}/$service:$TAG --name ecommerce
+            
+            echo "$service loaded"
+          done
           
           echo "All images loaded into KIND"
       
@@ -251,56 +268,41 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl apply -f infrastructure/common-configmap-template.yaml -n ${{ env.KUBE_NAMESPACE }}
+          
+          echo "ConfigMaps created"
 
       # ==========================================
-      # GUARDAR REVISIONES ANTERIORES (BACKUP)
+      # FUNCIÓN DE RETRY REUTILIZABLE
       # ==========================================
-      - name: Backup current Helm releases
-        id: backup
+      - name: Create retry helper script
         run: |
-          echo "Backing up current Helm releases..."
-          
-          # Crear directorio para backups
-          mkdir -p helm-backups
-          
-          # Lista de servicios a respaldar
-          SERVICES=(
-            "cloud-config"
-            "service-discovery"
-            "product-service"
-            "user-service"
-            "payment-service"
-            "order-service"
-            "shipping-service"
-            "favourite-service"
-            "api-gateway"
-          )
-          
-          # Para cada servicio, guardar la revisión actual
-          for service in "${SERVICES[@]}"; do
-            if helm status $service -n ${{ env.KUBE_NAMESPACE }} &>/dev/null; then
-              REVISION=$(helm history $service -n ${{ env.KUBE_NAMESPACE }} --max 1 -o json | jq -r '.[0].revision')
-              echo "$service=$REVISION" >> helm-backups/revisions.txt
-              echo "  ✓ $service: revision $REVISION"
-            else
-              echo "$service: not installed yet"
-            fi
-          done
-          
-          # Guardar el archivo de revisiones como artifact
-          echo "BACKUP_FILE=helm-backups/revisions.txt" >> $GITHUB_OUTPUT
-          echo "Backup completed"
-      
-      - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: helm-revisions-backup
-          path: helm-backups/revisions.txt
-          retention-days: 7
+          cat > /tmp/retry.sh << 'EOF'
+          #!/bin/bash
+          retry() {
+            local n=1
+            local max=${RETRY_MAX:-10}
+            local delay=${RETRY_DELAY:-10}
+            
+            while true; do
+              "$@" && break || {
+                if [[ $n -lt $max ]]; then
+                  echo "Attempt $n/$max failed. Retrying in ${delay}s..."
+                  sleep $delay
+                  ((n++))
+                else
+                  echo "All $max attempts failed. Aborting."
+                  return 1
+                fi
+              }
+            done
+            return 0
+          }
+          EOF
+          chmod +x /tmp/retry.sh
 
       - name: Deploy Cloud Config
         run: |
-          echo " Deploying Cloud Config..."
+          echo "Deploying Cloud Config..."
           TAG=build-${{ github.run_number }}
 
           helm upgrade --install cloud-config ./helm-charts/core/cloud-config \
@@ -315,15 +317,9 @@ jobs:
               
               POD=$(kubectl get pod -n ${{ env.KUBE_NAMESPACE }} -l app.kubernetes.io/name=cloud-config -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
               if [ -n "$POD" ]; then
-                echo ""
-                echo " Pod logs:"
+                echo "Pod logs:"
                 kubectl logs $POD -n ${{ env.KUBE_NAMESPACE }} --tail=100 || true
-                
-                echo ""
-                echo " Pod description:"
-                kubectl describe pod $POD -n ${{ env.KUBE_NAMESPACE }}
               fi
-              
               exit 1
             }
 
@@ -331,13 +327,15 @@ jobs:
             -l app.kubernetes.io/name=cloud-config \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
           
-          echo " Cloud Config deployed"
+          echo "Cloud Config deployed"
 
       # ==========================================
       # GATE 1: SMOKE TEST - CLOUD CONFIG
       # ==========================================
-      - name: "GATE - Cloud Config Smoke Test"
+      - name: "GATE 1 - Cloud Config Smoke Test"
         run: |
+          source /tmp/retry.sh
+          
           echo "================================================"
           echo "DEPLOYMENT GATE: Cloud Config Smoke Test"
           echo "================================================"
@@ -348,39 +346,20 @@ jobs:
           
           echo "Testing pod: $POD"
           
-            retry() {
-              local n=1
-              local max=10
-              local delay=10
-
-              while true; do
-                "$@" && break || {
-                  if [[ $n -lt $max ]]; then
-                    echo "Attempt $n/$max failed. Retrying in $delay seconds..."
-                    sleep $delay
-                    ((n++))
-                  else
-                    echo "Final attempt failed. Aborting."
-                    return 1
-                  fi
-                }
-              done
-            }
-
-            echo "Running health check with retries..."
-
-            retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              wget --spider -q http://localhost:9296/actuator/health
-
-            echo "Cloud Config health OK"
-
-            echo "Checking /actuator/info ..."
-            retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              wget --spider -q http://localhost:9296/actuator/info
-
-            echo "Config endpoints OK"
-
+          export RETRY_MAX=10
+          export RETRY_DELAY=10
           
+          echo "🏥 Running health check with retries..."
+          retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+            wget --spider -q http://localhost:9296/actuator/health
+          
+          echo "Cloud Config health OK"
+          
+          echo "Checking /actuator/info..."
+          retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+            wget --spider -q http://localhost:9296/actuator/info
+          
+          echo "Config endpoints OK"
           echo ""
           echo "GATE PASSED: Cloud Config is healthy"
           echo "================================================"
@@ -394,6 +373,7 @@ jobs:
             --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.repository=${{ env.DOCKER_USERNAME }}/service-discovery \
             --set image.tag=$TAG \
+            --set image.pullPolicy=IfNotPresent \
             --wait --timeout 5m
 
           kubectl wait --for=condition=ready pod \
@@ -405,7 +385,7 @@ jobs:
       # ==========================================
       # GATE 2: EUREKA REGISTRATION TEST
       # ==========================================
-      - name: "GATE - Eureka Registration Test"
+      - name: "GATE 2 - Eureka Registration Test"
         run: |
           echo "================================================"
           echo "DEPLOYMENT GATE: Eureka Registration Test"
@@ -417,11 +397,9 @@ jobs:
           
           echo "Testing Eureka on pod: $POD"
           
-          # Esperar un poco para que Eureka esté completamente listo
           echo "Waiting 60s for Eureka to stabilize..."
           sleep 60
           
-          # Test: Eureka UI accesible
           echo "Test: Eureka dashboard access..."
           HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
             sh -c "wget --spider --server-response http://localhost:8761/ 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1")
@@ -430,8 +408,8 @@ jobs:
             echo "Eureka dashboard not accessible (HTTP $HTTP_CODE)"
             exit 1
           fi
-          echo "Eureka dashboard accessible"
           
+          echo "Eureka dashboard accessible"
           echo ""
           echo "GATE PASSED: Eureka is ready"
           echo "================================================"
@@ -441,7 +419,7 @@ jobs:
           NAMESPACE=${{ env.KUBE_NAMESPACE }}
 
           if ! kubectl get secret actuator-credentials -n $NAMESPACE &>/dev/null; then
-            echo "Secret actuator-credentials not found, creating..."
+            echo "Creating actuator-credentials secret..."
             NEW_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
             
             kubectl create secret generic actuator-credentials \
@@ -463,7 +441,9 @@ jobs:
         run: |
           kubectl apply -f infrastructure/secrets/ecommerce-tls-sealed.yaml -n dev
       
-      # DEPLOY DE BUSINESS SERVICES
+      # ==========================================
+      # DEPLOY BUSINESS SERVICES
+      # ==========================================
       - name: Deploy Business Services
         run: |
           echo "Deploying Business Services..."
@@ -479,6 +459,7 @@ jobs:
           )
           
           for service in "${SERVICES[@]}"; do
+            echo ""
             echo "  → Deploying $service..."
             
             helm upgrade --install $service ./helm-charts/services/$service \
@@ -492,16 +473,19 @@ jobs:
               -l app.kubernetes.io/name=$service \
               -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
             
-            echo " $service deployed"
+            echo "$service deployed"
           done
           
+          echo ""
           echo "All business services deployed"
 
       # ==========================================
       # GATE 3: BUSINESS SERVICES INTEGRATION TEST
       # ==========================================
-      - name: "GATE - Business Services Integration Test"
+      - name: "GATE 3 - Business Services Integration Test"
         run: |
+          source /tmp/retry.sh
+          
           echo "================================================"
           echo "DEPLOYMENT GATE: Business Services Test"
           echo "================================================"
@@ -536,15 +520,16 @@ jobs:
               continue
             fi
             
-            # Test: Health endpoint
-            HTTP_CODE=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-              sh -c "wget --spider --server-response http://localhost:$port$context/actuator/health 2>&1 | grep 'HTTP/' | awk '{print \$2}' | head -1" 2>/dev/null || echo "000")
+            # Test con retry
+            export RETRY_MAX=5
+            export RETRY_DELAY=10
             
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "Health check failed for $service (HTTP $HTTP_CODE)"
-              FAILED=1
-            else
+            if retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
+              sh -c "wget --spider --server-response http://localhost:$port$context/actuator/health 2>&1 | grep -q 'HTTP/.*200'"; then
               echo "$service is healthy"
+            else
+              echo " Health check failed for $service"
+              FAILED=1
             fi
           done
           
@@ -580,8 +565,10 @@ jobs:
       # ==========================================
       # GATE 4: END-TO-END API GATEWAY TEST
       # ==========================================
-      - name: "GATE - API Gateway End-to-End Test"
+      - name: "GATE 4 - API Gateway End-to-End Test"
         run: |
+          source /tmp/retry.sh
+          
           echo "================================================"
           echo "DEPLOYMENT GATE: API Gateway E2E Test"
           echo "================================================"
@@ -595,61 +582,28 @@ jobs:
           
           echo "Testing API Gateway on pod: $POD"
           
-          retry() {
-            local n=1
-            local max=12      # 12 attempts → 2 minutes
-            local delay=10
+          export RETRY_MAX=12
+          export RETRY_DELAY=10
 
-            while true; do
-              "$@" && break || {
-                if [[ $n -lt $max ]]; then
-                  echo "Attempt $n/$max failed. Retrying in $delay seconds..."
-                  sleep $delay
-                  ((n++))
-                else
-                  echo "Final attempt failed. Aborting."
-                  return 1
-                fi
-              }
-            done
-          }
-
-          # --------------------------------------
           # Test 1: Gateway health
-          # --------------------------------------
           echo ""
           echo "Test 1: Gateway health check..."
-
           retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/actuator/health 2>&1 \
-            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
-
+            sh -c "wget --spider --server-response http://localhost:8080/actuator/health 2>&1 | grep -q 'HTTP/.*200'"
           echo "Gateway health check passed"
 
-
-          # --------------------------------------
-          # Test 2: Product-service route
-          # --------------------------------------
+          # Test 2: Product service route
           echo ""
           echo "Test 2: Testing service routes through gateway..."
-          echo "  Testing /product-service/actuator/health..."
-
+          echo "  → Testing /product-service/actuator/health..."
           retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/product-service/actuator/health 2>&1 \
-            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
-
+            sh -c "wget --spider --server-response http://localhost:8080/product-service/actuator/health 2>&1 | grep -q 'HTTP/.*200'"
           echo "Product service route working"
 
-
-          # --------------------------------------
-          # Test 3: User-service route
-          # --------------------------------------
-          echo "  Testing /user-service/actuator/health..."
-
+          # Test 3: User service route
+          echo "  → Testing /user-service/actuator/health..."
           retry kubectl exec -n ${{ env.KUBE_NAMESPACE }} $POD -- \
-            sh -c "wget --spider --server-response http://localhost:8080/user-service/actuator/health 2>&1 \
-            | grep 'HTTP/' | awk '{print \$2}' | head -1 | grep -q '^200$'"
-
+            sh -c "wget --spider --server-response http://localhost:8080/user-service/actuator/health 2>&1 | grep -q 'HTTP/.*200'"
           echo "User service route working"
 
           echo ""
@@ -659,7 +613,7 @@ jobs:
       # ==========================================
       # GATE 5: FINAL SYSTEM INTEGRATION TEST
       # ==========================================
-      - name: "GATE - Final System Integration Test"
+      - name: "GATE 5 - Final System Integration Test"
         run: |
           echo "================================================"
           echo "FINAL DEPLOYMENT GATE: System Integration"
@@ -672,11 +626,9 @@ jobs:
             -l app.kubernetes.io/name=service-discovery \
             -o jsonpath='{.items[0].metadata.name}')
           
-          # Obtener lista de aplicaciones registradas
           REGISTERED=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} $EUREKA_POD -- \
             sh -c "wget -qO- http://localhost:8761/eureka/apps" 2>/dev/null || echo "")
           
-          # Servicios esperados
           EXPECTED_SERVICES=(
             "API-GATEWAY"
             "PRODUCT-SERVICE"
@@ -710,7 +662,49 @@ jobs:
           echo "System is fully operational"
           echo "================================================"
 
+      # ==========================================
+      # CREAR BACKUP DEL DEPLOYMENT EXITOSO
+      # ==========================================
+      - name: Create backup of successful deployment
+        if: success()
+        run: |
+          echo "Creating backup of successful deployment..."
+          mkdir -p deployment-backup
+          
+          TAG=build-${{ github.run_number }}
+          
+          # Guardar información del deployment exitoso
+          cat > deployment-backup/deployment-info.txt << EOF
+          # Deployment Info - Build ${{ github.run_number }}
+          # Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          # Commit: ${{ github.sha }}
+          
+          cloud-config=$TAG
+          service-discovery=$TAG
+          product-service=$TAG
+          user-service=$TAG
+          payment-service=$TAG
+          order-service=$TAG
+          shipping-service=$TAG
+          favourite-service=$TAG
+          api-gateway=$TAG
+          EOF
+          
+          echo "Backup created"
+          echo ""
+          echo "Backup contents:"
+          cat deployment-backup/deployment-info.txt
+      
+      - name: Upload deployment backup
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-backup
+          path: deployment-backup/
+          retention-days: 30
+
       - name: Show deployment status
+        if: success()
         run: |
           echo "================================================"
           echo "DEPLOYMENT STATUS"
@@ -721,7 +715,7 @@ jobs:
           echo "================================================"
 
       # ==========================================
-      # ROLLBACK AUTOMÁTICO EN CASO DE FALLO
+      # ROLLBACK AUTOMÁTICO CON IMÁGENES ANTERIORES
       # ==========================================
       - name: "ROLLBACK - Automatic rollback on failure"
         if: failure()
@@ -729,74 +723,90 @@ jobs:
           echo "================================================"
           echo "DEPLOYMENT FAILED - INITIATING ROLLBACK"
           echo "================================================"
-          
-          # Descargar el archivo de revisiones de backup
           echo ""
-          echo "Retrieving backup revisions..."
           
-          if [ -f helm-backups/revisions.txt ]; then
-            echo "Backup file found"
-            cat helm-backups/revisions.txt
-            
+          # Verificar si hay backup previo
+          if [ ! -f previous-deployment/deployment-info.txt ]; then
+            echo "No previous successful deployment found"
+            echo "This appears to be the first deployment or backup expired"
             echo ""
-            echo "Rolling back services to previous revisions..."
+            echo "Cleaning up failed resources..."
             
-            # Leer cada línea del archivo de backup
-            while IFS='=' read -r service revision; do
-              if [ -n "$service" ] && [ -n "$revision" ]; then
-                echo ""
-                echo "Rolling back $service to revision $revision..."
-                
-                # Intentar rollback
-                if helm rollback $service $revision -n ${{ env.KUBE_NAMESPACE }} --wait --timeout 3m; then
-                  echo "$service rolled back successfully"
-                  
-                  # Verificar que el rollback fue exitoso
-                  kubectl wait --for=condition=ready pod \
-                    -l app.kubernetes.io/name=$service \
-                    -n ${{ env.KUBE_NAMESPACE }} --timeout=120s || echo "Warning: Pods not ready after rollback"
-                else
-                  echo "Warning: Could not rollback $service"
-                fi
-              fi
-            done < helm-backups/revisions.txt
-            
-            echo ""
-            echo "================================================"
-            echo "ROLLBACK COMPLETED"
-            echo "================================================"
-            echo ""
-            echo "Current status:"
             kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
             echo ""
-            helm list -n ${{ env.KUBE_NAMESPACE }}
+            echo "Recent events:"
+            kubectl get events -n ${{ env.KUBE_NAMESPACE }} --sort-by='.lastTimestamp' | tail -20
             
-          else
-            echo "No backup file found - this was a fresh installation"
-            echo "Nothing to rollback to"
+            echo ""
+            echo "Cannot rollback - no previous state available"
+            exit 0
           fi
           
+          echo "Found previous successful deployment"
+          echo "Previous deployment info:"
+          cat previous-deployment/deployment-info.txt
           echo ""
-          echo "================================================"
-          echo "FAILURE DIAGNOSTICS"
-          echo "================================================"
           
-          echo ""
-          echo "Pod status:"
-          kubectl get pods -n ${{ env.KUBE_NAMESPACE }}
+          # Leer tags de imágenes anteriores
+          declare -A PREVIOUS_TAGS
+          while IFS='=' read -r service tag; do
+            # Skip comments and empty lines
+            [[ "$service" =~ ^#.*$ ]] && continue
+            [[ -z "$service" ]] && continue
+            PREVIOUS_TAGS[$service]=$tag
+          done < previous-deployment/deployment-info.txt
           
+          echo "Rolling back to previous deployment..."
           echo ""
-          echo "Recent events:"
-          kubectl get events -n ${{ env.KUBE_NAMESPACE }} --sort-by='.lastTimestamp' | tail -30
           
-          echo ""
-          echo "Logs from failed pods:"
-          for pod in $(kubectl get pods -n ${{ env.KUBE_NAMESPACE }} --field-selector=status.phase!=Running -o name 2>/dev/null); do
-            echo ""
-            echo "=== Logs for $pod ==="
-            kubectl logs -n ${{ env.KUBE_NAMESPACE }} $pod --tail=50 || true
+          ROLLBACK_FAILED=0
+          
+          # Rollback services core
+          for service in cloud-config service-discovery; do
+            if [ -n "${PREVIOUS_TAGS[$service]}" ]; then
+              PREV_TAG=${PREVIOUS_TAGS[$service]}
+              echo "  → Rolling back $service to $PREV_TAG..."
+              
+              if helm upgrade --install $service ./helm-charts/core/$service \
+                --namespace ${{ env.KUBE_NAMESPACE }} \
+                --set image.repository=${{ env.DOCKER_USERNAME }}/$service \
+                --set image.tag=$PREV_TAG \
+                --set image.pullPolicy=IfNotPresent \
+                --wait --timeout 3m; then
+                echo "$service rolled back successfully"
+              else
+                echo " Failed to rollback $service"
+                ROLLBACK_FAILED=1
+              fi
+            fi
           done
           
-          echo ""
-          echo "================================================"
-          echo "Pipeline failed - system rolled back"
+          # Rollback business services
+          BUSINESS_SERVICES=(
+            "product-service"
+            "user-service"
+            "payment-service"
+            "order-service"
+            "shipping-service"
+            "favourite-service"
+          )
+          
+          for service in "${BUSINESS_SERVICES[@]}"; do
+            if [ -n "${PREVIOUS_TAGS[$service]}" ]; then
+              PREV_TAG=${PREVIOUS_TAGS[$service]}
+              echo "  → Rolling back $service to $PREV_TAG..."
+              
+              if helm upgrade --install $service ./helm-charts/services/$service \
+                --namespace ${{ env.KUBE_NAMESPACE }} \
+                --set image.repository=${{ env.DOCKER_USERNAME }}/$service \
+                --set image.tag=$PREV_TAG \
+                --set image.pullPolicy=IfNotPresent \
+                --wait --timeout 3m; then
+                echo "$service rolled back successfully"
+              else
+                echo "Failed to rollback $service"
+                ROLLBACK_FAILED=1
+              fi
+            fi
+          done
+          
