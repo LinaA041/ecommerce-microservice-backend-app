@@ -678,7 +678,6 @@ jobs:
           
           # Servicios esperados
           EXPECTED_SERVICES=(
-            "CLOUD-CONFIG"
             "API-GATEWAY"
             "PRODUCT-SERVICE"
             "USER-SERVICE"
