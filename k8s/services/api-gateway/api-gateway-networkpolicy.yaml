@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-to-api-gateway
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: proxy-client
+    - podSelector:
+        matchLabels:
+          app: service-discovery
+    - podSelector:
+        matchLabels:
+          app: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
