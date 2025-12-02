@@ -4,6 +4,7 @@ metadata:
   name: {{ include "api-gateway.fullname" . }}
   labels:
     {{- include "api-gateway.labels" . | nindent 4 }}
+    version: stable
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -13,3 +14,4 @@ spec:
       name: http
   selector:
     {{- include "api-gateway.selectorLabels" . | nindent 4 }}
+    version: stable

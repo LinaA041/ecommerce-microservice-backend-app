@@ -4,6 +4,8 @@ metadata:
   name: {{ include "shipping-service.fullname" . }}
   labels:
     {{- include "shipping-service.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:

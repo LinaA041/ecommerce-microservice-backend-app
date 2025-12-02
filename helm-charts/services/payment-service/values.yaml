@@ -69,10 +69,26 @@ service:
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8400
+  targetPort: 8400
 
-envFrom:
-  - configMapRef:
-      name: common-env
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/payment-service/actuator/prometheus"
+    prometheus.io/port: "8400"
+
+# ConfigMaps
+configMaps:
+  # ConfigMap comun (presente en infrastructure)
+  common:
+    enabled: true
+    name: "common-env"
+  
+  # ConfigMap especifico de este servicio (se crea con el Chart)
+  specific:
+    enabled: false
+    data:
+      SERVER_PORT: "8400"
+      SPRING_APPLICATION_NAME: "payment-service"
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -129,17 +145,17 @@ httpRoute:
   #     - name: version
   #       value: v2
 
-resources: {}
+resources: 
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  #limits:
-        #cpu: 300m
-        #memory: 256Mi
-  #requests:
-        #cpu: 200m
-        #memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 192Mi
 
 initContainers:
   enabled: true
@@ -163,10 +179,14 @@ readinessProbe: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
-  enabled: false
+  enabled: true
   minReplicas: 1
-  maxReplicas: 100
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 80
+  customMetric:
+    enabled: true
+    name: http_requests_per_second
+    targetValue: 10
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.

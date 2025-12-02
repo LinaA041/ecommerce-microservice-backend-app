@@ -4,6 +4,8 @@ metadata:
   name: {{ include "favourite-service.fullname" . }}
   labels:
     {{- include "favourite-service.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,4 +14,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "favourite-service.selectorLabels" . | nindent 4 }}
+   {{- include "favourite-service.selectorLabels" . | nindent 4 }}

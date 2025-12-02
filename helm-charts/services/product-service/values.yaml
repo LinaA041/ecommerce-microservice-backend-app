@@ -11,6 +11,11 @@ service:
   type: ClusterIP
   port: 8500
   targetPort: 8500
+  
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/product-service/actuator/prometheus"
+    prometheus.io/port: "8500"
 
 # ServiceAccount
 # useCommonServiceAccount: si se usa el de infrastructure/rbac
@@ -65,7 +70,7 @@ resources:
 
 # Probes (basadas en Spring Boot Actuator)
 livenessProbe:
-  enabled: false  # Cambia a true cuando  actuator este configurado
+  enabled: true
   path: /actuator/health/liveness
   initialDelaySeconds: 60
   periodSeconds: 10
@@ -73,7 +78,7 @@ livenessProbe:
   failureThreshold: 3
 
 readinessProbe:
-  enabled: false  # Cambia a true cuando  actuator este configurado
+  enabled: true
   path: /actuator/health/readiness
   initialDelaySeconds: 30
   periodSeconds: 5
@@ -87,9 +92,7 @@ strategy:
     maxSurge: 25%
     maxUnavailable: 25%
 
-
 terminationGracePeriodSeconds: 30
-
 
 labels:
   app: product-service
@@ -99,14 +102,16 @@ labels:
 # Anotaciones
 annotations: {}
 
-
-
 autoscaling:
-  enabled: false  # Cambia a true cuando se implemente autoscaling
+  enabled: true
   minReplicas: 1
-  maxReplicas: 5
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
+  customMetric:
+    enabled: true
+    name: http_requests_per_second
+    targetValue: 10
 
 ingress:
   enabled: false  # Cambia a true cuando se implemente ingress

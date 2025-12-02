@@ -6,6 +6,7 @@ namespace: dev
 replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+#Stable version 0.1.0
 image:
   repository: linaa111/api-gateway
   # This sets the pull policy for images.
@@ -69,6 +70,11 @@ service:
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
+  
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/api-gateway/actuator/prometheus"
+    prometheus.io/port: "8080"
 
 envFrom:
   - configMapRef:
@@ -131,17 +137,17 @@ httpRoute:
   #     - name: version
   #       value: v2
 
-resources: {}
+resources: 
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 384Mi
+    requests:
+      cpu: 150m
+      memory: 256Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe: {}
@@ -164,11 +170,15 @@ initContainers:
       
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
-  enabled: false
+  enabled: true
   minReplicas: 1
-  maxReplicas: 100
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+  customMetric:
+    enabled: true
+    name: http_requests_per_second
+    targetValue: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -188,3 +198,13 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+#Canary deployment settings
+canary:
+  enabled: true
+  weight: 10
+  image:
+    repository: linaa111/api-gateway
+    tag: "build-41"
+    pullPolicy: IfNotPresent
+  
