@@ -1,0 +1,49 @@
+serverFiles:
+  alerting_rules.yml:
+    groups:
+    - name: ecommerce_alerts
+      interval: 30s
+      rules:
+      
+      # Alerta 1: Servicio caído
+      - alert: ServiceDown
+        expr: up{namespace="dev"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Servicio {{ $labels.service }} está caído"
+          description: "El servicio {{ $labels.service }} en el namespace {{ $labels.namespace }} no responde hace más de 1 minuto."
+      
+      # Alerta 2: Memoria JVM alta
+      - alert: HighJVMMemory
+        expr: (sum by (application) (jvm_memory_used_bytes{area="heap"})) / (sum by (application) (jvm_memory_max_bytes{area="heap"})) * 100 > 50
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Memoria heap alta en {{ $labels.application }}"
+          description: "{{ $labels.application }} ({{ $labels.instance }}) está usando {{ $value }}% de memoria heap."
+
+      
+      - alert: HighOrLowRequestRate
+        expr: sum by(application) (rate(http_server_requests_seconds_count{namespace="dev"}[48m])) * 100 > 1
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Actividad inusual en {{ $labels.application }}"
+          description: "El servicio {{ $labels.application }} está recibiendo un número inusual de solicitudes."
+      
+      - alert: HighAverageLatency
+        expr: (sum by(application) (rate(http_server_requests_seconds_sum{namespace="dev"}[30m])) / sum by(application) (rate(http_server_requests_seconds_count{namespace="dev"}[30m]))) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Latencia promedio alta en {{ $labels.application }}"
+          description: "La latencia promedio en {{ $labels.application }} supera 1 segundo en los últimos 30 minutos."
