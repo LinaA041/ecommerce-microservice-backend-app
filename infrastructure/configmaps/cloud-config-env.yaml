@@ -6,6 +6,8 @@ metadata:
 data:
   # Cloud Config NO debe importar configuración de sí mismo
   SPRING_CONFIG_IMPORT: ""
+  SPRING_PROFILES_ACTIVE: "dev"
+  SPRING_ZIPKIN_BASE_URL: "http://zipkin:9411"
 
   EUREKA_CLIENT_REGION: "default"
   EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT: "myzone"

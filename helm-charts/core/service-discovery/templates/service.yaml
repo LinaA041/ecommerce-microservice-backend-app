@@ -4,6 +4,8 @@ metadata:
   name: {{ include "service-discovery.fullname" . }}
   labels:
     {{- include "service-discovery.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
