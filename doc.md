@@ -3,13 +3,13 @@
 ### 1.1 Descripción general
 La arquitectura implementada sigue el patrón de microservicios con los siguientes componentes:
 
-Servicios de Infraestructura:
+**Servicios de infraestructura:**
 
 - Cloud Config Server (puerto 9296): Gestión centralizada de configuración
 - Service Discovery (Eureka) (puerto 8761): Registro y descubrimiento de servicios
 - API Gateway (puerto 8080): Punto de entrada único con enrutamiento dinámico
 
-Microservicios de negocio:
+**Microservicios de negocio:**
 
 - Product Service (puerto 8500): Gestión de productos y categorías
 - User Service (puerto 8700): Gestión de usuarios y autenticación
@@ -18,7 +18,7 @@ Microservicios de negocio:
 - Shipping Service (puerto 8600): Gestión de envíos
 - Favourite Service (puerto 8800): Gestión de favoritos
 
-Servicios de observabilidad:
+**Servicios de observabilidad:**
 
 - Zipkin (puerto 9411): Tracing distribuido
 - Prometheus (puerto 9090): Recolección de métricas
@@ -44,7 +44,9 @@ helm-charts/
 │   ├── payment-service/
 │   ├── shipping-service/
 │   ├── favourite-service/
+│   ├── proxy-client/
 │   └── api-gateway/
+ 
 ```
 
 ### 1.3 Dependencias y orden de despliegue
@@ -446,11 +448,14 @@ kubectl logs -n dev -l version=canary
 
 Ventajas de usar Helm:
 
-Reutilización de templates
-Gestión de releases y versiones
-Rollback sencillo: helm rollback <release> <revision>
-Configuración centralizada en values.yaml
-Sobrescritura de valores en deploy: --set key=value
+Reutilización de templates.
+
+Gestión de releases y versiones.
+
+Rollback sencillo: *helm rollback <release> <revision>*
+Configuración centralizada en values.yaml.
+
+Sobrescritura de valores en deploy: *--set key=value*
 
 Comandos comunes:
 
@@ -574,7 +579,7 @@ Alerta 3:HighOrLowRequestRate
           summary: "Actividad inusual en {{ $labels.application }}"
           description: "El servicio {{ $labels.application }} está recibiendo un número inusual de solicitudes."
 ```
-Alerta 4:
+Alerta 4: HighAverageLatency
 
 ```bash
 alert: HighAverageLatency
@@ -621,7 +626,7 @@ Debugging de errores en flujos complejos
 ![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/aeae6cbf-c6c4-460b-8cd8-125bc20afbaa)
 
 ### 5.5 Dashboards Personalizados
-Dashboard 1: Business Metrics (Stakeholders de Negocio)
+**Dashboard 1:** Business Metrics (Stakeholders de Negocio)
 Métricas incluidas:
 
 - Total de requests por servicio (actividad)
@@ -630,9 +635,9 @@ Métricas incluidas:
 - Servicios disponibles
 - Actividad por servicio (Product, Order, User, Payment ...)
 
-Propósito: KPIs comprensibles para gerencia y stakeholders no técnicos.
+**Propósito:** KPIs comprensibles para gerencia y stakeholders no técnicos.
 
-Dashboard 2: Technical Metrics (Equipo Técnico)
+**Dashboard 2:** Technical Metrics (Equipo Técnico)
 Métricas incluidas:
 
 - JVM Heap Memory Usage
@@ -641,7 +646,7 @@ Métricas incluidas:
 - Total de threads JVM
 - Process CPU Usage
 
-Propósito: Monitoreo técnico para developers y SRE.
+**Propósito:** Monitoreo técnico para developers y SRE.
 
 Acceso:
 ```bash
@@ -653,7 +658,7 @@ Y en el navegador consultar: *http://localhost:3000*
 Evaluación de Loki:
 Se intentó implementar Loki para logging centralizado, pero se encontraron limitaciones de recursos en el ambiente de desarrollo (Minikube):
 
-Problemas identificados:
+**Problemas identificados:**
 
 Loki ingester failing health checks.
 
@@ -661,14 +666,17 @@ Context timeouts en push de logs.
 
 Recursos insuficientes en ambiente local.
 
-Alternativa implementada:
-Desarrollo: kubectl logs con namespaces organizados.
+**Alternativa implementada:**
 
-Documentación para producción:
+Desarrollo: 
+
+kubectl logs con namespaces organizados.
+
+**Documentación para producción:**
+
 En un ambiente productivo se implementaría:
 
-- ELK Stack (Elasticsearch, Logstash, Kibana) para logging empresarial.
-O Loki con recursos adecuados (CPU/memoria) y almacenamiento persistente.
+- ELK Stack (Elasticsearch, Logstash, Kibana) para logging empresarial o Loki con recursos adecuados (CPU/memoria) y almacenamiento persistente.
 - Logs estructurados en JSON para facilitar búsquedas.
 - Retención de logs de 30-90 días según compliance.
 - Agregación de logs por servicio, namespace y nivel (ERROR, WARN, INFO).
@@ -697,20 +705,20 @@ kubectl logs -n dev deployment/product-service | grep -i error
 Métricas HTTP disponibles:
 Prometheus recolecta automáticamente métricas de todas las llamadas HTTP entre servicios gracias a Spring Boot Actuator:
 
-Requests entre servicios
+**Requests entre servicios**
 ```bash
 http_server_requests_seconds_count{namespace="dev"}
 ```
 
-Latencia de comunicación
+**Latencia de comunicación**
 ```bash
 rate(http_server_requests_seconds_sum[5m]) / rate(http_server_requests_seconds_count[5m])
 ```
-Errores en comunicación
+**Errores en comunicación**
 ```bash
 http_server_requests_seconds_count{status=~"5.."}
 ```
-Panel en Grafana para inter-service communication:
+**Panel en Grafana para inter-service communication:**
 
 Query ejemplo:
 ```bash
@@ -722,6 +730,7 @@ Muestra:
 - Frecuencia de llamadas
 - Latencia de cada llamada
 - Errores en la comunicación
+
 
 
 
