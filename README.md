@@ -13,4 +13,4 @@ Para acceder a la presentación haga click en el siguiente enlace:
 
 Para acceder a la documentación general del proyecto haga clic en el siguiente enlace:
 
-[Documentación general](Proyecto Final – Plataformas II.pdf)
+[Documentación general](Proyecto_Final_PlataformasII.pdf)
