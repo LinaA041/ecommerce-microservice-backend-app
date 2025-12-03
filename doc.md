@@ -890,9 +890,63 @@ hey -z 3m -c 20 - q 10 http://<product-service-url>/endpoint
 Estas pruebas permitieron observar la eficiencia del escalado, asegurando que los microservicios mantuvieran su operatividad incluso bajo condiciones de alta demanda.
 
 
+## 7. ALMACENAMIENTO Y PERSISTENCIA
 
+En el entorno de desarrollo se implementó persistencia de datos para los componentes críticos de monitoreo mediante Persistent Volumes (PV) y Persistent Volume Claims (PVC). Esto asegura que la información no se pierda al reiniciar pods o durante despliegues.
 
+### 7.1 Persistent Volumes y Persistent Volume Claims
 
+Se crearon y enlazaron PVCs para Grafana y Prometheus en el namespace monitoring:
+
+|Recurso	      |Capacidad	|PVC	                          |Estado	|StorageClass |
+|-----------------|-------------|---------------------------------|---------|-------------|
+|Grafana	      |4Gi	        |grafana                          |Bound	|standard     |
+|Prometheus Server|8Gi	        |prometheus-server                |Bound	|standard     |
+|Alertmanager	  |2Gi	        |storage-prometheus-alertmanager-0|	Bound	|standard     |
+
+*Nota: El StorageClass utilizado es el estándar de Minikube, que asegura aprovisionamiento dinámico de volúmenes.*
+
+Los servicios stateful, como Grafana y Prometheus, escriben su información persistente dentro de */var/lib/grafana* y */var/lib/prometheus*, respectivamente, dentro del pod.
+
+### 7.2 Backup y restauración de datos persistentes
+
+Para garantizar la recuperación ante fallos, se implementó un mecanismo de backup manual utilizando kubectl cp. Por ejemplo, para respaldar los datos de Grafana:
+
+```bash
+kubectl cp monitoring/grafana-54c648c7c7-drz5b:/var/lib/grafana ./grafana-backup
+```
+
+Esto copia todo el contenido del PVC asociado al pod de Grafana hacia un directorio local *./grafana-backup.*
+
+Incluye dashboards, configuraciones, plugins y cualquier otro dato persistente.
+
+**Restauración del backup**
+
+Para restaurar los datos de Grafana desde el backup local al pod, se pueden seguir estos pasos:
+
+Detener temporalmente el pod de Grafana para evitar conflictos al escribir en el PVC:
+
+```bash
+kubectl scale deployment grafana --replicas=0 -n monitoring
+```
+
+Copiar los datos de vuelta al PVC del pod usando kubectl cp:
+
+```bash
+kubectl cp ./grafana-backup monitoring/grafana-54c648c7c7-drz5b:/var/lib/grafana
+```
+
+Reiniciar el pod de Grafana para que cargue la configuración restaurada:
+
+```
+kubectl scale deployment grafana --replicas=1 -n monitoring
+```
+
+Verificar que los dashboards, usuarios y configuraciones se hayan recuperado correctamente accediendo a Grafana.
+
+Nota: El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
+
+Con esto, la persistencia está garantizada y se tiene un procedimiento claro para backup y recuperación de datos, incluso en entornos de desarrollo como Minikube.
 
 
 
