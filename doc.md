@@ -1,31 +1,28 @@
-## Arquitectura e infraestructura
+![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/de84ddbe-637a-44c6-b9fd-425124fd925d)## Arquitectura e infraestructura
 
-## 1.1 Descripción general
+### 1.1 Descripción general
 La arquitectura implementada sigue el patrón de microservicios con los siguientes componentes:
 
 Servicios de Infraestructura:
 
-Cloud Config Server (puerto 9296): Gestión centralizada de configuración
-Service Discovery (Eureka) (puerto 8761): Registro y descubrimiento de servicios
-
-API Gateway:
-
-API Gateway (puerto 8080): Punto de entrada único con enrutamiento dinámico
+- Cloud Config Server (puerto 9296): Gestión centralizada de configuración
+- Service Discovery (Eureka) (puerto 8761): Registro y descubrimiento de servicios
+- API Gateway (puerto 8080): Punto de entrada único con enrutamiento dinámico
 
 Microservicios de negocio:
 
-Product Service (puerto 8500): Gestión de productos y categorías
-User Service (puerto 8700): Gestión de usuarios y autenticación
-Order Service (puerto 8300): Procesamiento de órdenes
-Payment Service (puerto 8400): Procesamiento de pagos
-Shipping Service (puerto 8600): Gestión de envíos
-Favourite Service (puerto 8800): Gestión de favoritos
+- Product Service (puerto 8500): Gestión de productos y categorías
+- User Service (puerto 8700): Gestión de usuarios y autenticación
+- Order Service (puerto 8300): Procesamiento de órdenes
+- Payment Service (puerto 8400): Procesamiento de pagos
+- Shipping Service (puerto 8600): Gestión de envíos
+- Favourite Service (puerto 8800): Gestión de favoritos
 
 Servicios de observabilidad:
 
-Zipkin (puerto 9411): Tracing distribuido
-Prometheus (puerto 9090): Recolección de métricas
-Grafana (puerto 3000): Visualización de métricas
+- Zipkin (puerto 9411): Tracing distribuido
+- Prometheus (puerto 9090): Recolección de métricas
+- Grafana (puerto 3000): Visualización de métricas
 
 ### 1.2 Implementación en Kubernetes
 Cluster: Minikube (desarrollo) / KIND (CI/CD)
@@ -34,6 +31,7 @@ Namespaces:
 - monitoring: Stack de observabilidad (Prometheus, Grafana)
 Helm Charts:
 Todos los microservicios están empaquetados con Helm Charts organizados en:
+```bash
 helm-charts/
 ├── core/
 │   ├── cloud-config/
@@ -47,7 +45,7 @@ helm-charts/
 │   ├── shipping-service/
 │   ├── favourite-service/
 │   └── api-gateway/
-
+```
 
 ### 1.3 Dependencias y orden de despliegue
 
@@ -377,7 +375,9 @@ Flujo de Canary Deployment:
 
 Deploy stable (v1):
 
+```bash
 helm install api-gateway . --set canary.enabled=false
+```
 → 100% del tráfico va a v1
 
 Deploy canary (v2) con 10%:
@@ -483,12 +483,13 @@ helm install grafana grafana/grafana -n monitoring --set adminPassword=admin123
 
 **Arquitectura de monitoreo:**
 
+```bash
 Microservicios (/actuator/prometheus)
         ↓
    Prometheus (scrape)
         ↓
      Grafana (visualización)
-
+```
 ### 5.2 Aprovechamiento de Actuator Endpoints
 
 Endpoints expuestos en cada microservicio:
@@ -501,32 +502,37 @@ management:
 ```
 
 **Métricas disponibles:**
+```bash
 - `/actuator/health` → Estado del servicio
 - `/actuator/info` → Información de la aplicación
 - `/actuator/metrics` → Métricas en formato JSON
 - `/actuator/prometheus` → Métricas en formato Prometheus
+```
 
 **Ejemplo de métricas expuestas:**
 
-JVM :
-jvm_memory_used_bytes
-jvm_memory_max_bytes
-jvm_threads_live_threads
-process_cpu_usage
+**JVM :**
+- jvm_memory_used_bytes
+- jvm_memory_max_bytes
+- jvm_threads_live_threads
+- process_cpu_usage
 
-HTTP :
-http_server_requests_seconds_count
-http_server_requests_seconds_sum
-http_server_requests_seconds_bucket
+**HTTP :**
+- http_server_requests_seconds_count
+- http_server_requests_seconds_sum
+- http_server_requests_seconds_bucket
 
-Spring Boot
-spring_application_started_time_seconds
+**Spring Boot**
+- spring_application_started_time_seconds
 
 ### 5.3 Configuración de Alertas
 
 Alertas configuradas en Prometheus:
+
 Alerta 1: Service Down
-yaml- alert: ServiceDown
+
+```bash
+- alert: ServiceDown
   expr: up{namespace="dev"} == 0
   for: 1m
   labels:
@@ -534,44 +540,64 @@ yaml- alert: ServiceDown
   annotations:
     summary: "Servicio {{ $labels.service }} está caído"
     description: "El servicio no responde hace más de 1 minuto"
+```
+
 Alerta 2: High JVM Memory
 yaml- alert: HighJVMMemory
-  expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 80
+  expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 50
   for: 2m
   labels:
     severity: warning
   annotations:
     summary: "Memoria heap alta en {{ $labels.application }}"
     description: "Usando {{ $value }}% de memoria heap"
-Alerta 3: High Error Rate
-yaml- alert: HighErrorRate
-  expr: (sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum by (application) (rate(http_server_requests_seconds_count[5m]))) * 100 > 5
-  for: 2m
-  labels:
-    severity: warning
-  annotations:
-    summary: "Alta tasa de errores en {{ $labels.application }}"
-    description: "{{ $value }}% de errores HTTP 5xx"
-Alerta 4: High Latency
-yaml- alert: HighLatency
-  expr: histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket[5m]))) > 2
-  for: 3m
-  labels:
-    severity: warning
-  annotations:
-    summary: "Latencia alta en {{ $labels.application }}"
-    description: "El percentil 95 de latencia es {{ $value }} segundos"
+
+Alerta 3:HighOrLowRequestRate
+```bash
+- alert: HighOrLowRequestRate
+        expr: sum by(application) (rate(http_server_requests_seconds_count{namespace="dev"}[48m])) * 100 > 1
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Actividad inusual en {{ $labels.application }}"
+          description: "El servicio {{ $labels.application }} está recibiendo un número inusual de solicitudes."
+```
+Alerta 4:
+
+```bash
+alert: HighAverageLatency
+        expr: (sum by(application) (rate(http_server_requests_seconds_sum{namespace="dev"}[30m])) / sum by(application) (rate(http_server_requests_seconds_count{namespace="dev"}[30m]))) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Latencia promedio alta en {{ $labels.application }}"
+          description: "La latencia promedio en {{ $labels.application }} supera 1 segundo en los últimos 30 minutos."
+```
+
 Acceso a alertas:
-bashkubectl port-forward -n monitoring svc/prometheus-server 9090:80
-# http://localhost:9090/alerts
-5.4 Tracing Distribuido con Zipkin
+
+```bash
+kubectl port-forward -n monitoring svc/prometheus-server 9090:80
+```
+Y accede al navegador en: *http://localhost:9090/alerts*
+
+### 5.4 Tracing Distribuido con Zipkin
 Zipkin ya incluido en la arquitectura original.
 Configuración en cada microservicio:
-yamlspring.zipkin:
+```bash
+spring.zipkin:
   base-url: http://zipkin:9411/
+```
 Acceso a Zipkin UI:
-bashkubectl port-forward -n dev svc/zipkin 9411:9411
-# http://localhost:9411/zipkin/
+```bash
+kubectl port-forward -n dev svc/zipkin 9411:9411
+```
+Y consultar el navegador en: http://localhost:9411/zipkin/
+
 Funcionalidad:
 
 Tracking de requests a través de múltiples servicios
@@ -579,7 +605,8 @@ Visualización de latencia por span
 Identificación de cuellos de botella
 Debugging de errores en flujos complejos
 
-Evidencia: Screenshot de traces mostrando el flujo: API Gateway → Product Service
+![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/aeae6cbf-c6c4-460b-8cd8-125bc20afbaa)
+
 ### 5.5 Dashboards Personalizados
 Dashboard 1: Business Metrics (Stakeholders de Negocio)
 Métricas incluidas:
@@ -657,14 +684,18 @@ Métricas HTTP disponibles:
 Prometheus recolecta automáticamente métricas de todas las llamadas HTTP entre servicios gracias a Spring Boot Actuator:
 
 Requests entre servicios
+```bash
 http_server_requests_seconds_count{namespace="dev"}
+```
 
 Latencia de comunicación
+```bash
 rate(http_server_requests_seconds_sum[5m]) / rate(http_server_requests_seconds_count[5m])
-
+```
 Errores en comunicación
+```bash
 http_server_requests_seconds_count{status=~"5.."}
-
+```
 Panel en Grafana para inter-service communication:
 
 Query ejemplo:
@@ -676,6 +707,7 @@ Qué servicios se llaman entre sí
 Frecuencia de llamadas
 Latencia de cada llamada
 Errores en la comunicación
+
 
 
 
