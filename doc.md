@@ -1,4 +1,4 @@
-![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/de84ddbe-637a-44c6-b9fd-425124fd925d)## Arquitectura e infraestructura
+## Arquitectura e infraestructura
 
 ### 1.1 Descripción general
 La arquitectura implementada sigue el patrón de microservicios con los siguientes componentes:
@@ -51,12 +51,11 @@ helm-charts/
 
 El orden correcto de despliegue respeta las dependencias de la arquitectura:
 
-Cloud Config → Provee configuración a todos los servicios.
-Service Discovery (Eureka) → Registro de servicios.
-PostgreSQL → Base de datos (para servicios que la requieran).
-Microservicios de negocio → Registran en Eureka y obtienen config.
-API Gateway → Enruta peticiones a los microservicios.
-Stack de monitoreo → Observa todo el sistema.
+- Cloud Config → Provee configuración a todos los servicios.
+- Service Discovery (Eureka) → Registro de servicios.
+- Microservicios de negocio → Registran en Eureka y obtienen config.
+- API Gateway → Enruta peticiones a los microservicios.
+- Stack de monitoreo → Observa todo el sistema.
 
 Implementación de init containers:
 Cada microservicio tiene init containers que esperan a que Cloud Config y Eureka estén disponibles antes de iniciar:
@@ -114,9 +113,11 @@ spec:
 ```
 Configuración de TLS/HTTPS:
 
-Certificado TLS configurado con Sealed Secrets
-Redirección automática HTTP → HTTPS
-Host: ecommerce.local
+Certificado TLS configurado con Sealed Secrets.
+
+Redirección automática HTTP → HTTPS.
+
+Host: ecommerce.local.
 
 ### 2.3 RBAC y Service Accounts
 ServiceAccount para microservicios:
@@ -541,7 +542,7 @@ Alerta 1: Service Down
     summary: "Servicio {{ $labels.service }} está caído"
     description: "El servicio no responde hace más de 1 minuto"
 ```
-
+```bash
 Alerta 2: High JVM Memory
 yaml- alert: HighJVMMemory
   expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 50
@@ -551,7 +552,7 @@ yaml- alert: HighJVMMemory
   annotations:
     summary: "Memoria heap alta en {{ $labels.application }}"
     description: "Usando {{ $value }}% de memoria heap"
-
+```
 Alerta 3:HighOrLowRequestRate
 ```bash
 - alert: HighOrLowRequestRate
@@ -601,8 +602,11 @@ Y consultar el navegador en: http://localhost:9411/zipkin/
 Funcionalidad:
 
 Tracking de requests a través de múltiples servicios
+
 Visualización de latencia por span
+
 Identificación de cuellos de botella
+
 Debugging de errores en flujos complejos
 
 ![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/aeae6cbf-c6c4-460b-8cd8-125bc20afbaa)
@@ -611,23 +615,22 @@ Debugging de errores en flujos complejos
 Dashboard 1: Business Metrics (Stakeholders de Negocio)
 Métricas incluidas:
 
-Total de requests por servicio (actividad)
-Requests exitosos vs fallidos
-Latencia promedio por servicio
-Servicios disponibles
-Actividad por servicio (Product, Order, User, Payment ...)
+- Total de requests por servicio (actividad)
+- Requests exitosos vs fallidos
+- Latencia promedio por servicio
+- Servicios disponibles
+- Actividad por servicio (Product, Order, User, Payment ...)
 
 Propósito: KPIs comprensibles para gerencia y stakeholders no técnicos.
 
 Dashboard 2: Technical Metrics (Equipo Técnico)
 Métricas incluidas:
 
-JVM Heap Memory Usage
-JVM Non-Heap Memory Usage
-Heap Memory Usage %
-Total de threads JVM
-Process CPU Usage
-
+- JVM Heap Memory Usage
+- JVM Non-Heap Memory Usage
+- Heap Memory Usage %
+- Total de threads JVM
+- Process CPU Usage
 
 Propósito: Monitoreo técnico para developers y SRE.
 
@@ -643,21 +646,23 @@ Se intentó implementar Loki para logging centralizado, pero se encontraron limi
 
 Problemas identificados:
 
-Loki ingester failing health checks
-Context timeouts en push de logs
-Recursos insuficientes en ambiente local
+Loki ingester failing health checks.
+
+Context timeouts en push de logs.
+
+Recursos insuficientes en ambiente local.
 
 Alternativa implementada:
-Desarrollo: kubectl logs con namespaces organizados
-Documentación para producción:
+Desarrollo: kubectl logs con namespaces organizados.
 
+Documentación para producción:
 En un ambiente productivo se implementaría:
 
-ELK Stack (Elasticsearch, Logstash, Kibana) para logging empresarial
-O Loki con recursos adecuados (CPU/memoria) y almacenamiento persistente
-Logs estructurados en JSON para facilitar búsquedas
-Retención de logs de 30-90 días según compliance
-Agregación de logs por servicio, namespace y nivel (ERROR, WARN, INFO)
+- ELK Stack (Elasticsearch, Logstash, Kibana) para logging empresarial.
+O Loki con recursos adecuados (CPU/memoria) y almacenamiento persistente.
+- Logs estructurados en JSON para facilitar búsquedas.
+- Retención de logs de 30-90 días según compliance.
+- Agregación de logs por servicio, namespace y nivel (ERROR, WARN, INFO).
 
 
 Comandos útiles para logs en desarrollo:
@@ -699,14 +704,16 @@ http_server_requests_seconds_count{status=~"5.."}
 Panel en Grafana para inter-service communication:
 
 Query ejemplo:
-promqlsum by (application, uri) (rate(http_server_requests_seconds_count{namespace="dev"}[5m]))
+```bash
+sum by (application, uri) (rate(http_server_requests_seconds_count{namespace="dev"}[5m]))
+```
 
 Muestra:
+- Qué servicios se llaman entre sí
+- Frecuencia de llamadas
+- Latencia de cada llamada
+- Errores en la comunicación
 
-Qué servicios se llaman entre sí
-Frecuencia de llamadas
-Latencia de cada llamada
-Errores en la comunicación
 
 
 
