@@ -295,28 +295,37 @@ yamldeploy-core:
 Mecanismo implementado:
 
 Antes del deploy: No se guarda estado previo (KIND es efímero).
+
 Durante el deploy: Health checks en cada fase (gates).
+
 Si falla algún gate: El pipeline falla y no continúa.
+
 Resultado: Se activa el rollback que restablece los servicios.
 
 Gates de validación:
 
 **Gate 1: Cloud Config health**
+```bash
 kubectl exec $POD -- wget --spider http://localhost:9296/actuator/health
-
+```
 **Gate 2: Eureka health**
+```bash
 kubectl exec $POD -- wget --spider http://localhost:8761/
-
+```
 **Gate 3: Business services health**
-for each service:
+Por cada servicio:
+```bash
   kubectl exec $POD -- wget --spider http://localhost:$PORT/$CONTEXT/actuator/health
-
+```
 **Gate 4: API Gateway E2E test**
+```bash
 kubectl exec $POD -- wget --spider http://localhost:8080/product-service/actuator/health
+```
 
 **Gate 5: System integration (Eureka registration)**
+```bash
 kubectl exec $EUREKA_POD -- wget -qO- http://localhost:8761/eureka/apps | grep SERVICE_NAME
-
+```
 
 **Si algún gate falla:**
 - Pipeline se detiene
@@ -713,6 +722,7 @@ Muestra:
 - Frecuencia de llamadas
 - Latencia de cada llamada
 - Errores en la comunicación
+
 
 
 
