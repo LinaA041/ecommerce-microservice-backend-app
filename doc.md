@@ -759,7 +759,57 @@ Muestra:
 - Latencia de cada llamada
 - Errores en la comunicación
 
+## 6. AUTOSCALING
+### 6.1 Horizontal Pod Autoscaler (HPA)
+Se evaluó la implementación de HPA para escalado automático de pods basado en métricas.
 
+Configuración básica de HPA:
+
+```bash
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: product-service-hpa
+  namespace: dev
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: product-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+**Nota sobre implementación:**
+
+Debido a las limitaciones de recursos en el entorno de desarrollo (Minikube), el HPA tiene un límite máximo de escalamiento de 2 réplicas. La asignación de recursos se realizó con el objetivo de garantizar la operatividad del sistema, por lo que los valores de requests y limits pueden considerarse bajos, pero son adecuados para el entorno de desarrollo. Por otro lado:
+
+En un ambiente productivo, se configurarían HPAs para:
+
+- **Product Service**: Alta demanda de consultas
+- **Order Service**: Picos durante ventas
+- **User Service**: Autenticación y sesiones
+- **API Gateway**: Balanceo de carga de entrada
+
+**Estrategia para producción:**
+
+1. **Métricas de CPU/Memoria** (70-80% threshold)
+2. **Métricas personalizadas** vía Prometheus Adapter:
+   - Request rate por segundo
+3. **KEDA** para escalado basado en eventos externos
 
 
 
