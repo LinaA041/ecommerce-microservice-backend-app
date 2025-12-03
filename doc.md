@@ -1,6 +1,11 @@
 ## Arquitectura e infraestructura
+**Autores:** Juan Manuel Velosa – Lina María Andrade  
+**Profesor:** Christian Flor  
+**Universidad Icesi – Diciembre 2025**
 
 ### 1.1 Descripción general
+Este proyecto implementa una arquitectura completa de microservicios diseñada para ser escalable, segura y observable. Los servicios interactúan entre sí mediante un API Gateway y Eureka (Service Discovery), mientras que la configuración se gestiona centralizadamente mediante Cloud Config Server. El diseño permite despliegues independientes, monitoreo detallado y recuperación ante fallos, siguiendo buenas prácticas de Kubernetes y CI/CD.
+
 La arquitectura implementada sigue el patrón de microservicios con los siguientes componentes:
 
 **Servicios de infraestructura:**
@@ -17,6 +22,11 @@ La arquitectura implementada sigue el patrón de microservicios con los siguient
 - Payment Service (puerto 8400): Procesamiento de pagos
 - Shipping Service (puerto 8600): Gestión de envíos
 - Favourite Service (puerto 8800): Gestión de favoritos
+- Despliegues independientes de cada microservicio.
+- Escalabilidad horizontal automática mediante HPA.
+- Observabilidad completa mediante Prometheus, Grafana y Zipkin.
+- Seguridad centralizada mediante TLS, RBAC y secretos rotables.
+- Integración continua y despliegue automatizado mediante GitHub Actions.
 
 **Servicios de observabilidad:**
 
@@ -60,6 +70,7 @@ El orden correcto de despliegue respeta las dependencias de la arquitectura:
 - Stack de monitoreo → Observa todo el sistema.
 
 Implementación de init containers:
+El pipeline CI/CD respeta este orden y verifica la disponibilidad de cada servicio mediante health checks. Esto asegura que no haya fallos por dependencias no listas y permite realizar rollback automático si algún servicio no pasa las validaciones.
 Cada microservicio tiene init containers que esperan a que Cloud Config y Eureka estén disponibles antes de iniciar:
 ```bash
 initContainers:
@@ -86,6 +97,8 @@ Tipos de servicios implementados:
 ### 2.2 Ingress Controller
 
 NGINX Ingress Controller instalado para manejar el tráfico externo:
+El NGINX Ingress Controller permite exponer los servicios de forma segura. Todas las rutas se manejan centralizadamente y se asegura la comunicación HTTPS mediante certificados TLS gestionados y secretos rotables. Esto permite redirección automática de HTTP a HTTPS y protección frente a accesos no autorizados.
+
 
 ```bash
 apiVersion: networking.k8s.io/v1
@@ -159,9 +172,12 @@ subjects:
   - kind: ServiceAccount
     name: microservice-sa
 ```
+Se implementa RBAC con permisos mínimos necesarios para cada microservicio. Los ServiceAccounts permiten que los pods accedan únicamente a los recursos que necesitan (ConfigMaps, Secrets y servicios internos), siguiendo el principio de menor privilegio y aumentando la seguridad del cluster.
 
 ### 2.4 Gestión de secretos
 Sealed Secrets implementado para encriptar secretos en Git:
+Sealed Secrets permite almacenar secretos cifrados en el repositorio Git y desencriptarlos automáticamente en el cluster. Esto asegura que las credenciales nunca estén expuestas y puedan rotarse automáticamente mediante CronJobs, aumentando la seguridad operativa y facilitando la auditoría.
+
 
 ```bash
 kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/latest/download/controller.yaml
@@ -259,6 +275,8 @@ Los servicios obtienen configuración de múltiples fuentes con el siguiente ord
 
 ### 4.1 Pipeline CI/CD con GitHub Actions
 
+El pipeline automatiza la construcción, pruebas, despliegue y monitoreo de cada microservicio. Incluye health checks en cada etapa, rollback automático ante fallos y pruebas end-to-end sobre el API Gateway. Esto garantiza despliegues confiables y reducción de errores humanos.
+
 **Archivo:** `.github/workflows/ci-cd-pipeline.yaml`
 
 **Estructura del pipeline:**
@@ -336,6 +354,8 @@ kubectl exec $EUREKA_POD -- wget -qO- http://localhost:8761/eureka/apps | grep S
 
 
 ### 4.3 Canary Deployment (API Gateway)
+
+El Canary Deployment permite desplegar versiones nuevas de un microservicio con solo un porcentaje del tráfico. Esto facilita la validación de la nueva versión sin afectar a todos los usuarios y permite revertir rápidamente si se detecta algún problema.
 
 **Implementación con NGINX Ingress:**
 
@@ -484,6 +504,8 @@ helm get values <release> -n <namespace>
 
 ## 5. OBSERVABILIDAD Y MONITOREO
 ###  5.1 Prometheus + Grafana
+
+Prometheus recolecta métricas automáticamente desde los endpoints de Spring Boot Actuator, mientras que Grafana permite visualizar estas métricas en dashboards personalizables para técnicos y stakeholders. Esto ofrece un monitoreo detallado del sistema y ayuda a detectar problemas rápidamente.
 
 Instalación:
 
@@ -655,6 +677,9 @@ kubectl port-forward -n monitoring svc/grafana 3000:80
 Y en el navegador consultar: *http://localhost:3000*
 
 ### 5.6 Logging Centralizado
+
+Se busca centralizar logs para todos los microservicios usando Loki o ELK Stack en producción. Esto permite depurar fallos, auditar eventos y analizar patrones de uso. En desarrollo se usa `kubectl logs` por namespace y por pod, garantizando visibilidad de errores y rendimiento.
+
 Evaluación de Loki:
 Se intentó implementar Loki para logging centralizado, pero se encontraron limitaciones de recursos en el ambiente de desarrollo (Minikube):
 
@@ -702,6 +727,9 @@ kubectl logs -n dev deployment/product-service | grep -i error
 ```
 
 ### 5.7 Monitoreo de comunicaciones entre servicios
+
+Se monitorean las llamadas HTTP entre microservicios, incluyendo latencia, frecuencia y errores. Esto permite detectar cuellos de botella y optimizar la comunicación interna de los servicios, garantizando resiliencia y eficiencia en la plataforma.
+
 Métricas HTTP disponibles:
 Prometheus recolecta automáticamente métricas de todas las llamadas HTTP entre servicios gracias a Spring Boot Actuator:
 
@@ -730,6 +758,7 @@ Muestra:
 - Frecuencia de llamadas
 - Latencia de cada llamada
 - Errores en la comunicación
+
 
 
 
