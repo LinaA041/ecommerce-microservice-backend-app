@@ -226,7 +226,7 @@ management:
       show-details: always
 ```
 
-3.2 ConfigMaps en Kubernetes
+### 3.2 ConfigMaps en Kubernetes
 ConfigMap común:
 ```bash
 yamlapiVersion: v1
@@ -730,6 +730,7 @@ Muestra:
 - Frecuencia de llamadas
 - Latencia de cada llamada
 - Errores en la comunicación
+
 
 
 
