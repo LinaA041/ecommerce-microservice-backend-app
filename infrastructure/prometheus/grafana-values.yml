@@ -1,0 +1,38 @@
+persistence:
+  enabled: true
+  type: pvc
+  size: 4Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard  
+
+adminUser: admin
+adminPassword: admin123  
+
+service:
+  type: ClusterIP  
+  port: 3000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards
+
+initChownData:
+  enabled: false

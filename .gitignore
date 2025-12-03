@@ -39,3 +39,6 @@ infrastructure/tls/*.key
 # Unsealed secrets
 infrastructure/tls/*-secret.yaml
 infrastructure/secrets/*-secret.yaml
+
+infrastructure/tls/*.key
+infrastructure/tls/*.crt

@@ -70,18 +70,18 @@ resources:
 
 # Probes (basadas en Spring Boot Actuator)
 livenessProbe:
-  enabled: true
+  enabled: false
   path: /actuator/health/liveness
-  initialDelaySeconds: 60
-  periodSeconds: 10
+  initialDelaySeconds: 100
+  periodSeconds: 20
   timeoutSeconds: 5
   failureThreshold: 3
 
-readinessProbe:
-  enabled: true
+readinessProbe: 
+  enabled: false
   path: /actuator/health/readiness
-  initialDelaySeconds: 30
-  periodSeconds: 5
+  initialDelaySeconds: 100
+  periodSeconds: 20
   timeoutSeconds: 3
   failureThreshold: 3
 

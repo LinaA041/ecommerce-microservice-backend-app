@@ -1,0 +1,20 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: order-service-scaledobject
+  namespace: dev
+spec:
+  scaleTargetRef:
+    name: order-service
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  cooldownPeriod: 30
+  pollingInterval: 15
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-server.monitoring.svc.cluster.local:80
+        metricName: order_service_request_rate
+        threshold: '10'
+        query: sum(rate(http_server_requests_seconds_count{namespace="dev", application="ORDER-SERVICE"}[2m])) * 60
+

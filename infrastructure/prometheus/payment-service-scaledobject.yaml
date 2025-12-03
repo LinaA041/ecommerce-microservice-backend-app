@@ -1,0 +1,20 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payment-service-scaledobject
+  namespace: dev
+spec:
+  scaleTargetRef:
+    name: payment-service          # Deployment que queremos escalar
+  minReplicaCount: 1
+  maxReplicaCount: 3               # Ajustable según recursos del cluster
+  cooldownPeriod: 30               # Segundos después de bajar la escala
+  pollingInterval: 15              # Frecuencia de chequeo en segundos
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-server.monitoring.svc.cluster.local:80
+        metricName: product_service_request_rate
+        threshold: '10'            # Activación del escalado cuando supera 10 req/min
+        query: sum(rate(http_server_requests_seconds_count{namespace="dev", application="PAYMENT-SERVICE"}[2m])) * 60
+

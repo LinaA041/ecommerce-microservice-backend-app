@@ -75,7 +75,7 @@ fi
 # --- Crear Sealed Secret ---
 
 kubeseal \
-  --controller-name=sealed-secrets-controller \
+  --controller-name=sealed-secrets \
   --controller-namespace=kube-system \
   --format yaml \
   -f "$TLS_DIR/temp-tls-secret.yaml" > "$SEALED_FILE"

@@ -151,11 +151,11 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 600m
+    memory: 512Mi
   requests:
-    cpu: 100m
-    memory: 192Mi
+    cpu: 400m
+    memory: 256Mi
 
 initContainers:
   enabled: true
@@ -179,10 +179,10 @@ readinessProbe: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
-  enabled: true
+  enabled: false
   minReplicas: 1
   maxReplicas: 2
-  targetCPUUtilizationPercentage: 80
+  targetCPUUtilizationPercentage: 90
   customMetric:
     enabled: true
     name: http_requests_per_second
