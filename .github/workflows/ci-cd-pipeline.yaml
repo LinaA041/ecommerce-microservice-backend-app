@@ -1,12 +1,6 @@
 name: CI/CD Pipeline - Microservicios E-commerce
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 env:
@@ -815,3 +809,4 @@ jobs:
             fi
           done
           
+
