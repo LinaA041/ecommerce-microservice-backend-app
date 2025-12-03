@@ -811,8 +811,83 @@ En un ambiente productivo, se configurarían HPAs para:
    - Request rate por segundo
 3. **KEDA** para escalado basado en eventos externos
 
+### 6.2 QoS
+
+En este caso, todos los microservicios cuentan actualmente con Horizontal Pod Autoscaler (HPA) configurado y se utiliza la clase de Quality of Service (QoS) Burstable, donde los requests de recursos son menores que los limits. Esto permite al cluster asignar recursos de manera flexible, asegurando que los pods puedan escalar según la demanda, pero sin comprometer la estabilidad del entorno de desarrollo.
+
+Se ha priorizado la asignación de recursos en microservicios críticos como Cloud Config Server, Service Discovery (Eureka) y API Gateway, dado que su disponibilidad impacta directamente la operación de toda la plataforma.
+
+Por ejemplo, el microservicio Cloud Config tiene configurados los siguientes recursos:
+
+```bash
+resources:
+  requests: 
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1024Mi"
+    cpu: "500m"
+```
+Además, mientras se realizaba el monitoreo, el uso de CPU de Cloud Config oscilaba entre en 2% - 10% del total disponible, con un límite máximo del 90%, lo que garantiza que pueda responder a incrementos de carga sin afectar al resto de los servicios.
+
+### 6.3 KEDA y escalado basado en eventos
+
+Se implementó KEDA para habilitar el escalado de microservicios basado en métricas personalizadas, en este caso utilizando Prometheus como fuente de eventos. La métrica utilizada fue:
+
+*http_server_requests_seconds_count*
 
 
+Esto permitió que los microservicios pudieran escalar no solo por CPU o memoria, sino también por la carga real de solicitudes. Se probó inicialmente con Payment Service y Order Service, usando la query de Prometheus que ya se visualiza en el dashboard para monitorear la actividad y validar el comportamiento del escalado.
+
+**Ajuste de recursos por microservicio**
+
+**Nota:** algunos microservicios como Favourite Service, Shipping Service y Payment Service tuvieron que ajustar sus límites y requests para poder operar correctamente y absorber la carga de eventos.
+
+Durante las pruebas, se observó que algunos servicios no contaban con recursos suficientes, lo que generaba limitaciones en el escalado:
+
+Payment Service: inicialmente requests: cpu 100m / limits: cpu 200m, se escaló a:
+
+``bash
+limits:
+  cpu: 350m
+  memory: 512Mi
+requests:
+  cpu: 250m
+  memory: 256Mi
+```
+
+Shipping Service: se incrementaron los recursos aún más para cubrir picos de carga:
+
+``bash
+limits:
+  cpu: 600m
+  memory: 512Mi
+requests:
+  cpu: 400m
+  memory: 256Mi
+```
+
+Resto de microservicios: para la memoria se estandarizó requests: 256Mi / limits: 512Mi, mientras que la CPU se ajustó según la criticidad de cada servicio. Los core services no requirieron cambios significativos debido a que fueron definidos con un número más amplio de recursos.
+
+Dentro de los servicios secundarios, los que fue necesario escalar tal y como se mencionó comprende a Payment Service, Order Service y a Favourite Service, debido a que, con los recursos asignados inicialmente no lograban registra en eureka o demás y se terminaba su proceso, entrando en un ciclo constante. 
+
+### 6.4 Pruebas de carga con hey
+
+Se realizaron pruebas de estrés utilizando la herramienta hey, simulando tráfico sobre los endpoints expuestos a través del Ingress. Esto permitió:
+
+Validar que HPA y KEDA respondieran correctamente a la carga de solicitudes.
+
+Verificar que los servicios alcanzaran el escalado previsto según la métrica de Prometheus.
+
+Comprobar que los ajustes de requests y limits fueran adecuados y evitaban sobrecargas.
+
+Ejemplo de comando usado:
+
+``bash
+hey -z 3m -c 20 - q 10 http://<product-service-url>/endpoint
+``
+
+Estas pruebas permitieron observar la eficiencia del escalado, asegurando que los microservicios mantuvieran su operatividad incluso bajo condiciones de alta demanda.
 
 
 
