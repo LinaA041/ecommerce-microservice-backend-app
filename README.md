@@ -14,3 +14,6 @@ Para acceder a la presentación haga click en el siguiente enlace:
 Para acceder a la documentación general del proyecto haga clic en el siguiente enlace:
 
 [Documentación general](Proyecto_Final_PlataformasII.pdf)
+
+Para acceder al video del proyecto haga clic en el siguiente enlace:
+[Demo](https://drive.google.com/file/d/1gz3CEdCBEodXx6PoqtqxkUAQpSX7_ZQC/view?usp=sharing)
