@@ -850,7 +850,9 @@ Esto permitió que los microservicios pudieran escalar no solo por CPU o memoria
 
 Durante las pruebas, se observó que algunos servicios no contaban con recursos suficientes, lo que generaba limitaciones en el escalado:
 
-Payment Service: inicialmente requests: cpu 100m / limits: cpu 200m, se escaló a:
+Payment Service: 
+
+Inicialmente requests: cpu 100m / limits: cpu 200m, se escaló a:
 
 ```bash
 limits:
@@ -861,7 +863,9 @@ requests:
   memory: 256Mi
 ```
 
-Shipping Service: se incrementaron los recursos aún más para cubrir picos de carga:
+Shipping Service: 
+
+Se incrementaron los recursos aún más para cubrir picos de carga:
 
 ```bash
 limits:
@@ -952,6 +956,7 @@ Verificar que los dashboards, usuarios y configuraciones se hayan recuperado cor
 **Nota:** El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
 
 Con esto, la persistencia está garantizada y se tiene un procedimiento claro para backup y recuperación de datos, incluso en entornos de desarrollo como Minikube.
+
 
 
 
