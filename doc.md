@@ -136,7 +136,7 @@ Host: ecommerce.local.
 ### 2.3 RBAC y Service Accounts
 ServiceAccount para microservicios:
 ```bash
-yamlapiVersion: v1
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: microservice-sa
@@ -145,7 +145,7 @@ metadata:
 Role con permisos mínimos:
 
 ```bash
-yamlapiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: microservice-role
@@ -159,7 +159,7 @@ rules:
 ```
 ```bash
 RoleBinding:
-yamlapiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: microservice-rolebinding
@@ -214,7 +214,7 @@ cloud-config-server/
 Configuración común (application.yml):
 
 ```bash
-yamlspring:
+spring:
   jackson:
     serialization:
       indent-output: true
@@ -253,8 +253,11 @@ data:
   EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://service-discovery:8761/eureka/"
   SPRING_ZIPKIN_BASE_URL: "http://zipkin:9411/"
   EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+```
 Inyección en pods:
-yamlenvFrom:
+
+```bash
+envFrom:
   - configMapRef:
       name: common-env
 ```
@@ -284,7 +287,7 @@ El pipeline automatiza la construcción, pruebas, despliegue y monitoreo de cada
 Build & Test → Docker Build & Push → Deploy to KIND → Health Checks → Rollback (si falla)
 Jobs implementados:
 Job 1: Build & Test
-yamlbuild-and-test:
+build-and-test:
   strategy:
     matrix:
       service: [product-service, user-service, payment-service, ...]
@@ -293,14 +296,14 @@ yamlbuild-and-test:
     - Ejecutar tests unitarios
     - Upload artifacts (JARs)
 Job 2: Docker Build & Push
-yamldocker-build:
+docker-build:
   steps:
     - Build imagen Docker
     - Tag con build number, SHA y latest
     - Push a Docker Hub
     - Caché de layers para optimizar builds
 Job 3: Deploy to KIND
-yamldeploy-core:
+deploy-core:
   steps:
     - Crear cluster KIND
     - Cargar imágenes en KIND
@@ -370,8 +373,10 @@ api-gateway/
 │   ├── service-canary.yaml      # Canary
 │   ├── ingress.yaml             # Stable
 │   └── ingress-canary.yaml      # Canary con annotations
+```
 values.yaml:
-yamlcanary:
+```bash
+canary:
   enabled: false  # Activar para canary
   weight: 10      # Porcentaje de tráfico (10%, 50%, 100%)
   image:
@@ -382,7 +387,7 @@ yamlcanary:
 Ingress canary con annotations:
 
 ```bash
-yamlapiVersion: networking.k8s.io/v1
+apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api-gateway-canary
@@ -442,10 +447,11 @@ helm upgrade api-gateway . \
      --set image.tag=build-42  # La v2 ahora es stable
 ```
 
-Validación del canary:
+**Validación del canary:**
+
+Verificar split de tráfico
 
 ```bash
-Verificar split de tráfico
 kubectl describe ingress api-gateway-canary -n dev | grep canary-weight
 ```
 Hacer múltiples peticiones y contar
@@ -465,18 +471,15 @@ kubectl logs -n dev -l version=canary
 
 ### 4.4 Uso de Helm Charts
 
-Ventajas de usar Helm:
+**Ventajas de usar Helm:**
 
-Reutilización de templates.
+- Reutilización de templates.
+- Gestión de releases y versiones.
+- Rollback sencillo: *helm rollback <release> <revision>*
+- Configuración centralizada en values.yaml.
+- Sobrescritura de valores en deploy: *--set key=value*
 
-Gestión de releases y versiones.
-
-Rollback sencillo: *helm rollback <release> <revision>*
-Configuración centralizada en values.yaml.
-
-Sobrescritura de valores en deploy: *--set key=value*
-
-Comandos comunes:
+**Comandos comunes:**
 
 Instalar
 ```bash
@@ -577,6 +580,8 @@ Alerta 1: Service Down
     summary: "Servicio {{ $labels.service }} está caído"
     description: "El servicio no responde hace más de 1 minuto"
 ```
+Alerta 2: High JVM Memory
+
 ```bash
 Alerta 2: High JVM Memory
 yaml- alert: HighJVMMemory
@@ -623,26 +628,23 @@ Y accede al navegador en: *http://localhost:9090/alerts*
 
 ### 5.4 Tracing Distribuido con Zipkin
 Zipkin ya incluido en la arquitectura original.
-Configuración en cada microservicio:
+**Configuración en cada microservicio:**
 ```bash
 spring.zipkin:
   base-url: http://zipkin:9411/
 ```
-Acceso a Zipkin UI:
+**Acceso a Zipkin UI:**
 ```bash
 kubectl port-forward -n dev svc/zipkin 9411:9411
 ```
-Y consultar el navegador en: http://localhost:9411/zipkin/
+Y consultar el navegador en: *http://localhost:9411/zipkin/*
 
-Funcionalidad:
+**Funcionalidad:**
 
-Tracking de requests a través de múltiples servicios
-
-Visualización de latencia por span
-
-Identificación de cuellos de botella
-
-Debugging de errores en flujos complejos
+- Tracking de requests a través de múltiples servicios.
+- Visualización de latencia por span.
+- Identificación de cuellos de botella.
+- Debugging de errores en flujos complejos.
 
 ![Imagen de WhatsApp 2025-12-01 a las 11 52 40_0c03b2b0](https://github.com/user-attachments/assets/aeae6cbf-c6c4-460b-8cd8-125bc20afbaa)
 
@@ -679,7 +681,7 @@ Y en el navegador consultar: *http://localhost:3000*
 
 Se busca centralizar logs para todos los microservicios usando Loki o ELK Stack en producción. Esto permite depurar fallos, auditar eventos y analizar patrones de uso. En desarrollo se usa `kubectl logs` por namespace y por pod, garantizando visibilidad de errores y rendimiento.
 
-Evaluación de Loki:
+**Evaluación de Loki:**
 Se intentó implementar Loki para logging centralizado, pero se encontraron limitaciones de recursos en el ambiente de desarrollo (Minikube):
 
 **Problemas identificados:**
@@ -717,6 +719,7 @@ Logs en tiempo real
 kubectl logs -n dev deployment/product-service -f
 ```
 Logs de múltiples pods
+
 ```bash
 kubectl logs -n dev -l app.kubernetes.io/name=product-service --tail=50
 ```
@@ -748,6 +751,7 @@ http_server_requests_seconds_count{status=~"5.."}
 **Panel en Grafana para inter-service communication:**
 
 Query ejemplo:
+
 ```bash
 sum by (application, uri) (rate(http_server_requests_seconds_count{namespace="dev"}[5m]))
 ```
@@ -846,7 +850,7 @@ Durante las pruebas, se observó que algunos servicios no contaban con recursos 
 
 Payment Service: inicialmente requests: cpu 100m / limits: cpu 200m, se escaló a:
 
-``bash
+```bash
 limits:
   cpu: 350m
   memory: 512Mi
@@ -857,7 +861,7 @@ requests:
 
 Shipping Service: se incrementaron los recursos aún más para cubrir picos de carga:
 
-``bash
+```bash
 limits:
   cpu: 600m
   memory: 512Mi
@@ -882,7 +886,7 @@ Comprobar que los ajustes de requests y limits fueran adecuados y evitaban sobre
 
 Ejemplo de comando usado:
 
-``bash
+```bash
 hey -z 3m -c 20 - q 10 http://<product-service-url>/endpoint
 ``
 
@@ -946,6 +950,7 @@ Verificar que los dashboards, usuarios y configuraciones se hayan recuperado cor
 Nota: El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
 
 Con esto, la persistencia está garantizada y se tiene un procedimiento claro para backup y recuperación de datos, incluso en entornos de desarrollo como Minikube.
+
 
 
 
