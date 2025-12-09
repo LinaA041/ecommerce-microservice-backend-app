@@ -35,12 +35,15 @@ La arquitectura implementada sigue el patrón de microservicios con los siguient
 - Grafana (puerto 3000): Visualización de métricas
 
 ### 1.2 Implementación en Kubernetes
-Cluster: Minikube (desarrollo) / KIND (CI/CD)
-Namespaces:
+**Cluster:** Minikube (desarrollo) / KIND (CI/CD).
+
+**Namespaces:**
 - dev: Ambiente de desarrollo con todos los microservicios
 - monitoring: Stack de observabilidad (Prometheus, Grafana)
-Helm Charts:
+  
+**Helm Charts:**
 Todos los microservicios están empaquetados con Helm Charts organizados en:
+
 ```bash
 helm-charts/
 ├── core/
@@ -68,9 +71,11 @@ El orden correcto de despliegue respeta las dependencias de la arquitectura:
 - API Gateway → Enruta peticiones a los microservicios.
 - Stack de monitoreo → Observa todo el sistema.
 
-Implementación de init containers:
+**Implementación de init containers:**
 El pipeline CI/CD respeta este orden y verifica la disponibilidad de cada servicio mediante health checks. Esto asegura que no haya fallos por dependencias no listas y permite realizar rollback automático si algún servicio no pasa las validaciones.
+
 Cada microservicio tiene init containers que esperan a que Cloud Config y Eureka estén disponibles antes de iniciar:
+
 ```bash
 initContainers:
   - name: wait-for-cloud-config
@@ -88,14 +93,15 @@ Tipos de servicios implementados:
 
 |Servicio         |Tipo              |Puerto    | Propósito|
 |-----------------|------------------|----------|----------|
-|cloud-config     |ClusterIP         |9296      |Interno   |
-|service-discovery|NodePort          |8761      |Interno   |
+|Cloud-config     |ClusterIP         |9296      |Interno   |
+|Service-discovery|NodePort          |8761      |Interno   |
 |Microservicios   |ClusterIP/NodePort|Variable  |Interno   |
-|api-gateway      |ClusterIP         |8080      |Expuesto  |
+|Api-gateway      |ClusterIP         |8080      |Expuesto  |
 
 ### 2.2 Ingress Controller
 
 NGINX Ingress Controller instalado para manejar el tráfico externo:
+
 El NGINX Ingress Controller permite exponer los servicios de forma segura. Todas las rutas se manejan centralizadamente y se asegura la comunicación HTTPS mediante certificados TLS gestionados y secretos rotables. Esto permite redirección automática de HTTP a HTTPS y protección frente a accesos no autorizados.
 
 
@@ -125,7 +131,7 @@ spec:
                 port:
                   number: 8080
 ```
-Configuración de TLS/HTTPS:
+**Configuración de TLS/HTTPS:**
 
 Certificado TLS configurado con Sealed Secrets.
 
@@ -135,6 +141,7 @@ Host: ecommerce.local.
 
 ### 2.3 RBAC y Service Accounts
 ServiceAccount para microservicios:
+
 ```bash
 apiVersion: v1
 kind: ServiceAccount
@@ -174,9 +181,8 @@ subjects:
 Se implementa RBAC con permisos mínimos necesarios para cada microservicio. Los ServiceAccounts permiten que los pods accedan únicamente a los recursos que necesitan (ConfigMaps, Secrets y servicios internos), siguiendo el principio de menor privilegio y aumentando la seguridad del cluster.
 
 ### 2.4 Gestión de secretos
-Sealed Secrets implementado para encriptar secretos en Git:
-Sealed Secrets permite almacenar secretos cifrados en el repositorio Git y desencriptarlos automáticamente en el cluster. Esto asegura que las credenciales nunca estén expuestas y puedan rotarse automáticamente mediante CronJobs, aumentando la seguridad operativa y facilitando la auditoría.
 
+**Sealed Secrets implementado para encriptar secretos en Git:** Sealed Secrets permite almacenar secretos cifrados en el repositorio Git y desencriptarlos automáticamente en el cluster. Esto asegura que las credenciales nunca estén expuestas y puedan rotarse automáticamente mediante CronJobs, aumentando la seguridad operativa y facilitando la auditoría.
 
 ```bash
 kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/latest/download/controller.yaml
@@ -211,7 +217,7 @@ cloud-config-server/
 ├── favourite-service-dev.yml
 └── api-gateway-dev.yml
 ```
-Configuración común (application.yml):
+**Configuración común (application.yml):**
 
 ```bash
 spring:
@@ -242,7 +248,8 @@ management:
 ```
 
 ### 3.2 ConfigMaps en Kubernetes
-ConfigMap común:
+
+**ConfigMap común:**
 ```bash
 yamlapiVersion: v1
 kind: ConfigMap
@@ -254,7 +261,7 @@ data:
   SPRING_ZIPKIN_BASE_URL: "http://zipkin:9411/"
   EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
 ```
-Inyección en pods:
+**Inyección en pods:**
 
 ```bash
 envFrom:
@@ -314,17 +321,16 @@ deploy-core:
 
 ### 4.2 Estrategia de rollback automatizado
 
-Mecanismo implementado:
+**Mecanismo implementado:**
 
-Antes del deploy: No se guarda estado previo (KIND es efímero).
-
-Durante el deploy: Health checks en cada fase (gates).
+- Antes del deploy: No se guarda estado previo (KIND es efímero).
+- Durante el deploy: Health checks en cada fase (gates).
 
 Si falla algún gate: El pipeline falla y no continúa.
 
 Resultado: Se activa el rollback que restablece los servicios.
 
-Gates de validación:
+**Gates de validación:**
 
 **Gate 1: Cloud Config health**
 ```bash
@@ -374,7 +380,8 @@ api-gateway/
 │   ├── ingress.yaml             # Stable
 │   └── ingress-canary.yaml      # Canary con annotations
 ```
-values.yaml:
+**values.yaml:**
+
 ```bash
 canary:
   enabled: false  # Activar para canary
@@ -384,7 +391,7 @@ canary:
     tag: "build-41"  # Versión canary (diferente a stable)
 ```
 
-Ingress canary con annotations:
+**Ingress canary con annotations:**
 
 ```bash
 apiVersion: networking.k8s.io/v1
@@ -407,16 +414,16 @@ spec:
                   number: 8080
 ```
 
-Flujo de Canary Deployment:
+**Flujo de Canary Deployment:**
 
-Deploy stable (v1):
+**Deploy stable (v1):**
 
 ```bash
 helm install api-gateway . --set canary.enabled=false
 ```
-→ 100% del tráfico va a v1
+Aquí, 100% del tráfico va a v1.
 
-Deploy canary (v2) con 10%:
+**Deploy canary (v2) con 10%:**
 
 ```bash
 helm upgrade api-gateway . \
@@ -424,16 +431,15 @@ helm upgrade api-gateway . \
      --set canary.weight=10 \
      --set canary.image.tag=build-42
 ```
-→ 90% v1, 10% v2
+Aquí, el 90% del tráfico se dirige a v1, mientras que el 10% del tráfico se dirige a v2.
 
-Monitorear métricas (errores, latencia, logs)
-Si todo OK, incrementar a 50%:
+Se realiza el monitoreo de métricas (errores, latencia, logs) y si todo se encuentra estable incrementar a 50%:
 
 ```bash
 helm upgrade api-gateway . --set canary.weight=50 --reuse-values
 ```
 
-Si todo OK, promover a 100%:
+Nuevamente, si todo se encuentra bien, es posible promover a 100%:
 
 ```bash
 helm upgrade api-gateway . --set canary.weight=100 --reuse-values
@@ -455,14 +461,14 @@ Verificar split de tráfico
 kubectl describe ingress api-gateway-canary -n dev | grep canary-weight
 ```
 Hacer múltiples peticiones y contar
-
 ```bash
 for i in {1..100}; do
   curl -s -k https://ecommerce.local/actuator/health > /dev/null
 done
 ```
 
-Ver logs de cada versión
+Ver logs de cada versión:
+
 ```bash
 kubectl logs -n dev -l version=stable
 kubectl logs -n dev -l version=canary
@@ -481,25 +487,25 @@ kubectl logs -n dev -l version=canary
 
 **Comandos comunes:**
 
-Instalar
+**Instalar:**
 ```bash
 helm install <release> ./chart -n <namespace>
 ```
-Actualizar
-
+**Actualizar:**
 ```bash
 helm upgrade <release> ./chart --reuse-values
 ```
-Ver historial
+**Ver historial:**
 ```bash
 helm history <release> -n <namespace>
 ```
 
-Rollback
+**Rollback:**
 ```bash
 helm rollback <release> <revision> -n <namespace>
 ```
-Ver valores aplicados
+**Ver valores aplicados:**
+
 ```bash
 helm get values <release> -n <namespace>
 ```
@@ -509,7 +515,7 @@ helm get values <release> -n <namespace>
 
 Prometheus recolecta métricas automáticamente desde los endpoints de Spring Boot Actuator, mientras que Grafana permite visualizar estas métricas en dashboards personalizables para técnicos y stakeholders. Esto ofrece un monitoreo detallado del sistema y ayuda a detectar problemas rápidamente.
 
-Instalación:
+**Instalación:**
 
 **Prometheus**
 ```bash
@@ -531,7 +537,7 @@ Microservicios (/actuator/prometheus)
 ```
 ### 5.2 Aprovechamiento de Actuator Endpoints
 
-Endpoints expuestos en cada microservicio:
+**Endpoints expuestos en cada microservicio:**
 ```bash
 management:
   endpoints:
@@ -566,9 +572,9 @@ management:
 
 ### 5.3 Configuración de Alertas
 
-Alertas configuradas en Prometheus:
+**Alertas configuradas en Prometheus:**
 
-Alerta 1: Service Down
+**Alerta 1: Service Down**
 
 ```bash
 - alert: ServiceDown
@@ -580,7 +586,7 @@ Alerta 1: Service Down
     summary: "Servicio {{ $labels.service }} está caído"
     description: "El servicio no responde hace más de 1 minuto"
 ```
-Alerta 2: High JVM Memory
+**Alerta 2: High JVM Memory**
 
 ```bash
 Alerta 2: High JVM Memory
@@ -593,7 +599,7 @@ yaml- alert: HighJVMMemory
     summary: "Memoria heap alta en {{ $labels.application }}"
     description: "Usando {{ $value }}% de memoria heap"
 ```
-Alerta 3:HighOrLowRequestRate
+**Alerta 3:HighOrLowRequestRate**
 ```bash
 - alert: HighOrLowRequestRate
         expr: sum by(application) (rate(http_server_requests_seconds_count{namespace="dev"}[48m])) * 100 > 1
@@ -605,7 +611,7 @@ Alerta 3:HighOrLowRequestRate
           summary: "Actividad inusual en {{ $labels.application }}"
           description: "El servicio {{ $labels.application }} está recibiendo un número inusual de solicitudes."
 ```
-Alerta 4: HighAverageLatency
+**Alerta 4: HighAverageLatency**
 
 ```bash
 alert: HighAverageLatency
@@ -619,7 +625,7 @@ alert: HighAverageLatency
           description: "La latencia promedio en {{ $labels.application }} supera 1 segundo en los últimos 30 minutos."
 ```
 
-Acceso a alertas:
+**Acceso a alertas:**
 
 ```bash
 kubectl port-forward -n monitoring svc/prometheus-server 9090:80
@@ -671,7 +677,7 @@ Métricas incluidas:
 
 **Propósito:** Monitoreo técnico para developers y SRE.
 
-Acceso:
+**Acceso:**
 ```bash
 kubectl port-forward -n monitoring svc/grafana 3000:80
 ```
@@ -694,8 +700,6 @@ Recursos insuficientes en ambiente local.
 
 **Alternativa implementada:**
 
-Desarrollo: 
-
 kubectl logs con namespaces organizados.
 
 **Documentación para producción:**
@@ -708,7 +712,7 @@ En un ambiente productivo se implementaría:
 - Agregación de logs por servicio, namespace y nivel (ERROR, WARN, INFO).
 
 
-Comandos útiles para logs en desarrollo:
+**Comandos útiles para logs en desarrollo:**
 
 Logs de un servicio
 ```bash
@@ -719,7 +723,6 @@ Logs en tiempo real
 kubectl logs -n dev deployment/product-service -f
 ```
 Logs de múltiples pods
-
 ```bash
 kubectl logs -n dev -l app.kubernetes.io/name=product-service --tail=50
 ```
@@ -732,8 +735,7 @@ kubectl logs -n dev deployment/product-service | grep -i error
 
 Se monitorean las llamadas HTTP entre microservicios, incluyendo latencia, frecuencia y errores. Esto permite detectar cuellos de botella y optimizar la comunicación interna de los servicios, garantizando resiliencia y eficiencia en la plataforma.
 
-Métricas HTTP disponibles:
-Prometheus recolecta automáticamente métricas de todas las llamadas HTTP entre servicios gracias a Spring Boot Actuator:
+**Métricas HTTP disponibles:** Prometheus recolecta automáticamente métricas de todas las llamadas HTTP entre servicios gracias a Spring Boot Actuator.
 
 **Requests entre servicios**
 ```bash
@@ -750,7 +752,7 @@ http_server_requests_seconds_count{status=~"5.."}
 ```
 **Panel en Grafana para inter-service communication:**
 
-Query ejemplo:
+**Query de ejemplo:**
 
 ```bash
 sum by (application, uri) (rate(http_server_requests_seconds_count{namespace="dev"}[5m]))
@@ -766,7 +768,7 @@ Muestra:
 ### 6.1 Horizontal Pod Autoscaler (HPA)
 Se evaluó la implementación de HPA para escalado automático de pods basado en métricas.
 
-Configuración básica de HPA:
+**Configuración básica de HPA:**
 
 ```bash
 apiVersion: autoscaling/v2
@@ -888,7 +890,7 @@ Ejemplo de comando usado:
 
 ```bash
 hey -z 3m -c 20 - q 10 http://<product-service-url>/endpoint
-``
+```
 
 Estas pruebas permitieron observar la eficiencia del escalado, asegurando que los microservicios mantuvieran su operatividad incluso bajo condiciones de alta demanda.
 
@@ -947,9 +949,10 @@ kubectl scale deployment grafana --replicas=1 -n monitoring
 
 Verificar que los dashboards, usuarios y configuraciones se hayan recuperado correctamente accediendo a Grafana.
 
-Nota: El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
+**Nota:** El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
 
 Con esto, la persistencia está garantizada y se tiene un procedimiento claro para backup y recuperación de datos, incluso en entornos de desarrollo como Minikube.
+
 
 
 
