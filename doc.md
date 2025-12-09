@@ -56,7 +56,6 @@ helm-charts/
 │   ├── favourite-service/
 │   ├── proxy-client/
 │   └── api-gateway/
- 
 ```
 
 ### 1.3 Dependencias y orden de despliegue
@@ -938,7 +937,7 @@ kubectl cp ./grafana-backup monitoring/grafana-54c648c7c7-drz5b:/var/lib/grafana
 
 Reiniciar el pod de Grafana para que cargue la configuración restaurada:
 
-```
+```bash
 kubectl scale deployment grafana --replicas=1 -n monitoring
 ```
 
@@ -947,6 +946,7 @@ Verificar que los dashboards, usuarios y configuraciones se hayan recuperado cor
 Nota: El mismo procedimiento aplica para Prometheus o Alertmanager, reemplazando la ruta de origen y destino según corresponda.
 
 Con esto, la persistencia está garantizada y se tiene un procedimiento claro para backup y recuperación de datos, incluso en entornos de desarrollo como Minikube.
+
 
 
 
